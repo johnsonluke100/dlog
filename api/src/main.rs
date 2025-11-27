@@ -11,7 +11,6 @@ use dlog_spec::{
     LandAuctionRules, LandGridCoord, LandLock, LandTier, MonetaryPolicy, OmegaFilesystemSnapshot,
     OmegaMasterRoot, PlanetId, SolarSystemConfig,
 };
-use dlog_sky::SkyTimeline;
 use serde::{Deserialize, Serialize};
 use std::{
     net::SocketAddr,
@@ -22,6 +21,77 @@ use tokio::time::{interval, Duration};
 use tracing_subscriber::EnvFilter;
 
 const PHI: f64 = 1.618_033_988_749_895_f64;
+
+// Monetary canon constants (Ω layer).
+// Holder: 61.8% APY → factor 1.618 per year.
+// Miner:  ~8.8248% APY → factor 1.088248 per year.
+const HOLDER_FACTOR_YEAR: f64 = 1.618_0;
+const MINER_FACTOR_YEAR: f64 = 1.088_248;
+const BLOCK_SECONDS: f64 = 8.0;
+const BLOCKS_PER_YEAR: f64 = 365.25 * 24.0 * 3600.0 / BLOCK_SECONDS;
+
+/// One slide in the Ω sky-show timeline.
+#[derive(Clone)]
+struct SkySlide {
+    id: u32,
+    path: String,
+    duration_ticks: u64,
+}
+
+/// Simple inlined sky timeline (we keep this in api so no extra crate is needed).
+#[derive(Clone)]
+struct SkyTimeline {
+    slides: Vec<SkySlide>,
+}
+
+impl SkyTimeline {
+    /// Eight default slides (1.jpg .. 8.jpg), durations scaled by phi_tick_hz.
+    fn default_eight(phi_tick_hz: f64) -> Self {
+        let seconds = [8.0, 8.0, 8.0, 8.0, 16.0, 16.0, 16.0, 16.0];
+        let base_paths = [
+            "slides/1.jpg",
+            "slides/2.jpg",
+            "slides/3.jpg",
+            "slides/4.jpg",
+            "slides/5.jpg",
+            "slides/6.jpg",
+            "slides/7.jpg",
+            "slides/8.jpg",
+        ];
+        let mut slides = Vec::with_capacity(8);
+        for (i, secs) in seconds.iter().enumerate() {
+            let ticks = (secs * phi_tick_hz).round() as u64;
+            slides.push(SkySlide {
+                id: (i + 1) as u32,
+                path: base_paths[i].to_string(),
+                duration_ticks: ticks.max(1),
+            });
+        }
+        SkyTimeline { slides }
+    }
+
+    fn total_duration_ticks(&self) -> u64 {
+        self.slides.iter().map(|s| s.duration_ticks).sum()
+    }
+
+    fn slide_at_tick(&self, tick: u64) -> Option<&SkySlide> {
+        if self.slides.is_empty() {
+            return None;
+        }
+        let total = self.total_duration_ticks();
+        if total == 0 {
+            return None;
+        }
+        let mut t = tick % total;
+        for s in &self.slides {
+            if t < s.duration_ticks {
+                return Some(s);
+            }
+            t -= s.duration_ticks;
+        }
+        self.slides.last()
+    }
+}
 
 #[derive(Clone)]
 struct AppState {
@@ -345,6 +415,27 @@ struct FilesystemLabelResponse {
     hash: String,
 }
 
+/// Query for /economy/simulate
+#[derive(Deserialize)]
+struct EconomySimQuery {
+    principal_dlog: u128,
+    years: f64,
+}
+
+/// Response for /economy/simulate
+#[derive(Serialize)]
+struct EconomySimResponse {
+    phi: f64,
+    principal_dlog: u128,
+    years: f64,
+    blocks: u64,
+    holder_factor_year: f64,
+    miner_factor_year: f64,
+    holder_only_balance: f64,
+    combined_balance_if_all_to_holder: f64,
+    approx_total_expansion_factor: f64,
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -357,10 +448,11 @@ async fn main() {
 
     let universe = init_universe();
     let tick_hz = universe.config.phi_tick_hz;
+    let sky_timeline = SkyTimeline::default_eight(tick_hz);
 
     let state = AppState {
         universe: Arc::new(Mutex::new(universe)),
-        sky: Arc::new(Mutex::new(SkyTimeline::default_eight())),
+        sky: Arc::new(Mutex::new(sky_timeline)),
     };
 
     // -----------------------------
@@ -417,6 +509,7 @@ async fn main() {
         .route("/wallet/overview", get(wallet_overview))
         .route("/world/warp", get(world_warp))
         .route("/filesystem/label", get(filesystem_label))
+        .route("/economy/simulate", get(economy_simulate))
         .with_state(state);
 
     tracing::info!(
@@ -494,7 +587,7 @@ async fn sky_current(State(state): State<AppState>) -> Json<SkyCurrentResponse> 
     let slide = sky
         .slide_at_tick(ticks)
         .cloned()
-        .unwrap_or_else(|| dlog_spec::SkyShowConfig::default_eight().slides[0].clone());
+        .unwrap_or_else(|| SkyTimeline::default_eight(tick_hz).slides[0].clone());
 
     Json(SkyCurrentResponse {
         tick: ticks,
@@ -896,7 +989,7 @@ async fn universe_snapshot(State(state): State<AppState>) -> Json<UniverseSnapsh
         in_auction: false,
     };
 
-    // Current sky slide (reuse the same logic as /sky/current)
+    // Current sky slide (reuse same logic as /sky/current)
     let universe = state.universe.lock().expect("universe lock poisoned");
     let tick_hz = universe.config.phi_tick_hz;
     drop(universe);
@@ -910,7 +1003,7 @@ async fn universe_snapshot(State(state): State<AppState>) -> Json<UniverseSnapsh
     let slide = sky_timeline
         .slide_at_tick(ticks)
         .cloned()
-        .unwrap_or_else(|| dlog_spec::SkyShowConfig::default_eight().slides[0].clone());
+        .unwrap_or_else(|| SkyTimeline::default_eight(tick_hz).slides[0].clone());
 
     let sky = SkyCurrentResponse {
         tick: ticks,
@@ -1120,5 +1213,47 @@ async fn filesystem_label(
         universe_file_path,
         omega_segments,
         hash,
+    })
+}
+
+/// Economy simulator for your φ-money canon.
+///
+/// Inputs:
+///   - principal_dlog
+///   - years
+///
+/// Uses:
+///   - Holder growth:  ×1.618 per year
+///   - Miner expansion: ×1.088248 per year
+///   - ~8s/block → ~{BLOCKS_PER_YEAR} blocks/year
+async fn economy_simulate(Query(q): Query<EconomySimQuery>) -> Json<EconomySimResponse> {
+    let principal = q.principal_dlog;
+    let years = if q.years <= 0.0 { 1.0 } else { q.years };
+
+    let blocks_f = BLOCKS_PER_YEAR * years;
+    let blocks = blocks_f.round().max(0.0) as u64;
+
+    let holder_factor_year = HOLDER_FACTOR_YEAR;
+    let miner_factor_year = MINER_FACTOR_YEAR;
+
+    // Holder-only growth (as if all fire is personal tree).
+    let holder_only_balance = (principal as f64) * holder_factor_year.powf(years);
+
+    // Combined growth if both fires effectively push into the same principal.
+    let combined_factor_year = holder_factor_year * miner_factor_year;
+    let combined_balance =
+        (principal as f64) * combined_factor_year.powf(years);
+    let approx_total_expansion_factor = combined_factor_year.powf(years);
+
+    Json(EconomySimResponse {
+        phi: PHI,
+        principal_dlog: principal,
+        years,
+        blocks,
+        holder_factor_year,
+        miner_factor_year,
+        holder_only_balance,
+        combined_balance_if_all_to_holder: combined_balance,
+        approx_total_expansion_factor,
     })
 }
