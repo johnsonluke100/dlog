@@ -42,8 +42,8 @@ impl UniverseSnapshot {
             return;
         }
 
-        let yearly = spec.holder_yearly_factor;
-        let blocks_per_year = spec.blocks_per_attention_year as f64;
+        let yearly = 1.0 + spec.holder_interest_apy;
+        let blocks_per_year = (365.0 * 24.0 * 60.0 * 60.0) / spec.target_block_seconds;
 
         // per-block factor = yearly^(1 / blocks_per_year)
         let per_block = yearly.powf(1.0 / blocks_per_year);
