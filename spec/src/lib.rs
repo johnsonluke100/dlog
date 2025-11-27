@@ -12,7 +12,6 @@ use std::fmt;
 
 pub mod constants {
     //! Core Ω constants — φ and yearly factors.
-    use super::*;
 
     /// The golden ratio φ (double precision).
     pub const PHI: f64 = 1.618_033_988_749_894_f64;
@@ -31,7 +30,6 @@ pub mod constants {
 
 pub mod ids {
     //! Identity + label IDs.
-    use super::*;
 
     /// Labels live at (phone_e164, label_name).
     ///
@@ -45,7 +43,6 @@ pub mod ids {
 
 pub mod cosmos {
     //! Planets, φ-per-tick gravity profiles, and global Ω-cosmology hooks.
-    use super::*;
 
     /// Which world / hollow body we’re talking about.
     #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
@@ -147,7 +144,6 @@ pub mod cosmos {
 
 pub mod money {
     //! Monetary policy: miner + holder fire.
-    use super::*;
     use crate::constants::*;
 
     /// Encodes the Ω monetary policy in one struct for the API.
@@ -181,7 +177,6 @@ pub mod money {
 
 pub mod omega_fs {
     //! Ω filesystem paths — everything under https://dloG.com/∞/
-    use super::*;
     use crate::ids::LabelId;
 
     /// What kind of Ω file a path represents.
@@ -227,7 +222,6 @@ pub mod omega_fs {
 
 pub mod land {
     //! Land locks, tiers, and metadata.
-    use super::*;
     use crate::cosmos::PlanetId;
 
     /// Lock tiers — grid footprints scale roughly ×10 per tier.
