@@ -165,6 +165,29 @@ struct PlanetGravityTableResponse {
     rows: Vec<PlanetGravityRow>,
 }
 
+/// One Leidenfrost flame channel (north/east/south/west) in Ω-space.
+#[derive(Serialize)]
+struct FlameChannel {
+    /// Human name: "north", "east", "south", "west".
+    name: String,
+    /// 0..3 index for the channel.
+    index: u8,
+    /// 3D position in some local Ω-space (e.g. above the player / world).
+    position: [f32; 3],
+    /// Phase in radians (φ-driven, time-based).
+    phase: f64,
+    /// Normalized intensity in [0,1] (for audio gain, shader brightness, etc.).
+    intensity: f32,
+}
+
+/// Full Ω flames snapshot.
+#[derive(Serialize)]
+struct OmegaFlamesResponse {
+    phi: f64,
+    tick_hz: f64,
+    channels: Vec<FlameChannel>,
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -230,6 +253,7 @@ async fn main() {
         .route("/solar/system", get(solar_system))
         .route("/flight/law", get(flight_law))
         .route("/flight/planet_gravity_table", get(planet_gravity_table))
+        .route("/omega/flames", get(omega_flames))
         .with_state(state);
 
     tracing::info!(
@@ -495,5 +519,50 @@ async fn planet_gravity_table() -> Json<PlanetGravityTableResponse> {
         phi: PHI,
         server_ticks_per_second: server_tps,
         rows,
+    })
+}
+
+/// Ω flames endpoint: 4 phi-synced channels, straight up in 3D.
+/// This is the Rust reflection of your old omega_numpy_container's four flames.
+async fn omega_flames(State(state): State<AppState>) -> Json<OmegaFlamesResponse> {
+    let universe = state.universe.lock().expect("universe lock poisoned");
+    let tick_hz = universe.config.phi_tick_hz;
+    drop(universe);
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let t = now.as_secs_f64();
+
+    let two_pi = std::f64::consts::PI * 2.0;
+
+    // Channel layout: four cardinal flames around the observer, all pointing "up":
+    let defs: &[(u8, &str, [f32; 3])] = &[
+        (0, "north", [0.0, 1.0, -1.0]),
+        (1, "east", [1.0, 1.0, 0.0]),
+        (2, "south", [0.0, 1.0, 1.0]),
+        (3, "west", [-1.0, 1.0, 0.0]),
+    ];
+
+    let mut channels = Vec::with_capacity(defs.len());
+    for (idx, name, pos) in defs.iter().copied() {
+        // φ-driven phase: time * φ plus quarter-turn offsets per channel.
+        let phase = two_pi * (t * PHI + (idx as f64) / 4.0);
+        // Fold sin wave into [0,1] as intensity.
+        let intensity = ((phase.sin() + 1.0) * 0.5) as f32;
+
+        channels.push(FlameChannel {
+            name: name.to_string(),
+            index: idx,
+            position: pos,
+            phase,
+            intensity,
+        });
+    }
+
+    Json(OmegaFlamesResponse {
+        phi: PHI,
+        tick_hz,
+        channels,
     })
 }
