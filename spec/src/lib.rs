@@ -194,7 +194,9 @@ impl Default for MonetaryPolicy {
 
 impl MonetaryPolicy {
     /// Approximate total APY (miner + holder).
-    pub fn total_apy(&self) => self.miner_inflation_apy + self.holder_interest_apy;
+    pub fn total_apy(&self) -> f64 {
+        self.miner_inflation_apy + self.holder_interest_apy
+    }
 }
 
 //////////////////////////////////////////
@@ -328,6 +330,38 @@ impl DeviceLimitsRules {
 }
 
 //////////////////////////////////////////
+// Devices + identities (Apple / Google)
+//////////////////////////////////////////
+
+/// Device identifier (e.g. hardware or OS-specific ID).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct DeviceId(pub String);
+
+/// Which identity provider secured this login.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum IdentityProvider {
+    Apple,
+    Google,
+}
+
+/// Identity metadata: phone + provider account.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdentityMeta {
+    pub phone: String,
+    pub provider: IdentityProvider,
+    /// Subject / user id from the identity provider.
+    pub provider_subject: String,
+}
+
+/// Device metadata: which phone it belongs to and when it joined.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceMeta {
+    pub device_id: DeviceId,
+    pub phone: String,
+    pub enrolled_at_block: BlockHeight,
+}
+
+//////////////////////////////////////////
 // Landlocks, access, Zillow estimate
 //////////////////////////////////////////
 
@@ -387,6 +421,37 @@ impl LandLock {
     pub fn zillow_estimate(&self) -> u128 {
         self.zillow_estimate_dlog
     }
+}
+
+/// Land auto-auction rules (inactivity → auction).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LandAuctionRules {
+    /// If owner attention doesn't visit for this many real-life days,
+    /// the lock is eligible for auto-auction.
+    pub inactivity_days: u32,
+}
+
+impl Default for LandAuctionRules {
+    fn default() -> Self {
+        Self {
+            inactivity_days: 256,
+        }
+    }
+}
+
+//////////////////////////////////////////
+// Label metadata (creation / deletion)
+//////////////////////////////////////////
+
+/// Metadata for a label account: kind + lifecycle.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabelMeta {
+    pub address: Address,
+    pub kind: LabelKind,
+    pub created_at_block: BlockHeight,
+    /// If Some, the label is logically deleted (no new activity),
+    /// but its history and final universe hash remain.
+    pub deleted_at_block: Option<BlockHeight>,
 }
 
 //////////////////////////////////////////
@@ -465,7 +530,7 @@ impl Default for AirdropNetworkRules {
         Self {
             max_per_ip: 1,
             allow_vpns: false,
-            notes: "One airdrop per public IP; VPN/data-center IPs blocked; multiple phones/Apple-Google accounts allowed but require separate networks.".to_string(),
+            notes: "One airdrop per public IP; VPN/datacenter IPs blocked; multiple phones/Apple-Google accounts allowed but require separate networks.".to_string(),
         }
     }
 }

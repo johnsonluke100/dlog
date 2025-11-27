@@ -7,8 +7,8 @@ use dlog_core::init_universe;
 use dlog_corelib::{UniverseError, UniverseState};
 use dlog_spec::{
     AccessGrant, AccessRole, Address, Amount, AirdropNetworkRules, BlockHeight, DeviceLimitsRules,
-    GenesisConfig, GiftRules, LabelUniverseHash, LabelUniverseKey, LandLock, LandTier, MonetaryPolicy,
-    OmegaFilesystemSnapshot, OmegaMasterRoot, PlanetId,
+    GenesisConfig, GiftRules, LabelUniverseHash, LabelUniverseKey, LandAuctionRules, LandLock,
+    LandTier, MonetaryPolicy, OmegaFilesystemSnapshot, OmegaMasterRoot, PlanetId,
 };
 use dlog_sky::SkyTimeline;
 use serde::{Deserialize, Serialize};
@@ -110,6 +110,16 @@ struct OmegaRootResponse {
     snapshot: OmegaFilesystemSnapshot,
 }
 
+#[derive(Serialize)]
+struct AirdropNetworkResponse {
+    rules: AirdropNetworkRules,
+}
+
+#[derive(Serialize)]
+struct LandAuctionRulesResponse {
+    rules: LandAuctionRules,
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -136,8 +146,10 @@ async fn main() {
         .route("/policy/money", get(money_policy))
         .route("/airdrop/gift/rules", get(gift_rules))
         .route("/airdrop/gift/daily_cap", get(gift_daily_cap))
+        .route("/airdrop/network", get(airdrop_network))
         .route("/device/daily_cap", get(device_daily_cap))
         .route("/land/example_lock", get(land_example_lock))
+        .route("/land/auction/rules", get(land_auction_rules))
         .route("/genesis/roots", get(genesis_roots))
         .route("/omega/root", get(omega_root))
         .with_state(state);
@@ -246,6 +258,11 @@ async fn gift_daily_cap(Query(q): Query<GiftCapQuery>) -> Json<GiftCapResponse> 
     })
 }
 
+async fn airdrop_network() -> Json<AirdropNetworkResponse> {
+    let rules = AirdropNetworkRules::default();
+    Json(AirdropNetworkResponse { rules })
+}
+
 async fn device_daily_cap(Query(q): Query<DeviceCapQuery>) -> Json<DeviceCapResponse> {
     let rules = DeviceLimitsRules::default();
     let cap = rules.daily_cap(q.days_since_enroll);
@@ -274,6 +291,11 @@ async fn land_example_lock() -> Json<LandLock> {
         in_auction: false,
     };
     Json(lock)
+}
+
+async fn land_auction_rules() -> Json<LandAuctionRulesResponse> {
+    let rules = LandAuctionRules::default();
+    Json(LandAuctionRulesResponse { rules })
 }
 
 async fn genesis_roots() -> Json<GenesisRootsResponse> {

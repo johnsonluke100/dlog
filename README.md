@@ -4,12 +4,12 @@ Root Rust workspace for the DLOG / Ω universe.
 
 Crates:
 
-- `spec`      → shared types and models (addresses, planets, config, sky, money, omega-fs, land, genesis)
+- `spec`      → shared types and models (addresses, planets, money, sky, omega-fs, land, genesis, devices)
 - `corelib`   → universe logic (state machine, balances, interest ticks)
 - `core`      → coordination layer between phi physics and chain logic
-- `omega`     → Omega Phi 8888 Hz "Leidenfrost Flame Engine" (Rust rework of omega_numpy_container)
+- `omega`     → Omega Phi 8888 Hz "Leidenfrost Flame Engine" (Rust)
 - `sky`       → SkyLighting logic: slideshows, frame selection, phi-based sky timeline
-- `api`       → HTTP server exposing a minimal JSON API over the universe + sky + canon-spec helpers
+- `api`       → HTTP server exposing a minimal JSON API over universe + sky + canon-spec helpers
 
 Top-level:
 
