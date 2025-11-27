@@ -1,0 +1,11 @@
+# dlog.toml
+# Basic configuration for the local node.
+
+# Human-readable name for this node.
+node_name = "dlog-node-local"
+
+# Bind address for the HTTP API.
+bind_addr = "0.0.0.0:8080"
+
+# Conceptual phi tick rate (Ω ticks per second).
+phi_tick_rate = 1000.0

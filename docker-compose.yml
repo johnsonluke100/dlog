@@ -1,0 +1,10 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    image: dlog-api:latest
+    container_name: dlog_api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
