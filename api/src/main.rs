@@ -9,7 +9,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use tower_http::cors::CorsLayer;
 use tracing::info;
 
@@ -50,6 +50,7 @@ struct UniverseInner {
     filesystem_rules: FilesystemRules,
     ethic_creed: EthicCreed,
     solar_system: SolarSystemAligned,
+    emotion: EmotionState,
 }
 
 impl UniverseInner {
@@ -77,6 +78,7 @@ impl UniverseInner {
             filesystem_rules: FilesystemRules::dlog_default(),
             ethic_creed: EthicCreed::dlog_default(),
             solar_system: SolarSystemAligned::dlog_eclipse_default(),
+            emotion: EmotionState::dlog_default(),
         }
     }
 
@@ -97,7 +99,12 @@ impl UniverseInner {
             device_rules: self.device_rules.clone(),
             ethic_creed: self.ethic_creed.clone(),
             solar_system: self.solar_system.clone(),
+            emotion: self.emotion.clone(),
         }
+    }
+
+    fn apply_emotion_nudge(&mut self, nudge: &EmotionNudge) {
+        self.emotion.apply_nudge(nudge);
     }
 }
 
@@ -548,6 +555,95 @@ impl SolarSystemAligned {
     }
 }
 
+/* ========= Emotion Layer – Inside-Out Panel ========= */
+
+#[derive(Debug, Clone, Serialize)]
+struct EmotionState {
+    joy: f32,
+    sadness: f32,
+    anger: f32,
+    fear: f32,
+    disgust: f32,
+    awe: f32,
+    comment: String,
+}
+
+impl EmotionState {
+    fn dlog_default() -> Self {
+        Self {
+            joy: 0.82,
+            sadness: 0.14,
+            anger: 0.07,
+            fear: 0.10,
+            disgust: 0.06,
+            awe: 0.88,
+            comment: "Default state: joyful, cosmic awe, with just enough sadness/fear to stay honest."
+                .into(),
+        }
+    }
+
+    fn clamp01(x: f32) -> f32 {
+        if x < 0.0 {
+            0.0
+        } else if x > 1.0 {
+            1.0
+        } else {
+            x
+        }
+    }
+
+    fn apply_nudge(&mut self, n: &EmotionNudge) {
+        if let Some(d) = n.joy_delta {
+            self.joy = Self::clamp01(self.joy + d);
+        }
+        if let Some(d) = n.sadness_delta {
+            self.sadness = Self::clamp01(self.sadness + d);
+        }
+        if let Some(d) = n.anger_delta {
+            self.anger = Self::clamp01(self.anger + d);
+        }
+        if let Some(d) = n.fear_delta {
+            self.fear = Self::clamp01(self.fear + d);
+        }
+        if let Some(d) = n.disgust_delta {
+            self.disgust = Self::clamp01(self.disgust + d);
+        }
+        if let Some(d) = n.awe_delta {
+            self.awe = Self::clamp01(self.awe + d);
+        }
+        if let Some(ref c) = n.comment {
+            self.comment = c.clone();
+        }
+    }
+
+    fn dominant_name(&self) -> String {
+        let mut pairs = vec![
+            ("joy", self.joy),
+            ("sadness", self.sadness),
+            ("anger", self.anger),
+            ("fear", self.fear),
+            ("disgust", self.disgust),
+            ("awe", self.awe),
+        ];
+        pairs.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        pairs[0].0.to_string()
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct EmotionNudge {
+    joy_delta: Option<f32>,
+    sadness_delta: Option<f32>,
+    anger_delta: Option<f32>,
+    fear_delta: Option<f32>,
+    disgust_delta: Option<f32>,
+    awe_delta: Option<f32>,
+    comment: Option<String>,
+}
+
 /* ========= Runtime Spine & Platforms ========= */
 
 #[derive(Debug, Serialize)]
@@ -582,6 +678,7 @@ struct UniverseSnapshot {
     device_rules: DeviceOutflowRules,
     ethic_creed: EthicCreed,
     solar_system: SolarSystemAligned,
+    emotion: EmotionState,
 }
 
 #[derive(Debug, Serialize)]
@@ -632,6 +729,7 @@ struct VibeAnthem {
     block_height_octal: String,
     hype_level: u8,
     phi_tick_hz: f64,
+    core_emotion: String,
     notes: Vec<String>,
 }
 
@@ -785,8 +883,8 @@ async fn root() -> Json<RootResponse> {
     let mode = env::var("DLOG_RUNTIME_MODE").unwrap_or_else(|_| "testing_local".into());
     Json(RootResponse {
         service: "dlog-api".into(),
-        version: "0.2.6".into(),
-        message: "Ω heartbeat online; solar rail aligned; base-8 canon engaged; Rust-only spine; tokenomics rail active; fearless spiral rolling."
+        version: "0.2.7".into(),
+        message: "Ω heartbeat online; solar rail aligned; base-8 canon engaged; Rust-only spine; tokenomics humming; Inside-Out core memory panel lit."
             .into(),
         mode_hint: mode,
     })
@@ -953,18 +1051,18 @@ async fn get_land_auction_rules(
     })
 }
 
+#[derive(Debug, Serialize)]
+struct LandAdjacencyExample {
+    description: String,
+    valid: bool,
+}
+
 async fn example_land_adjacency() -> Json<LandAdjacencyExample> {
     Json(LandAdjacencyExample {
         description: "T-shaped / plus-shaped clusters are valid; isolated single-pixel islands are rejected."
             .into(),
         valid: true,
     })
-}
-
-#[derive(Debug, Serialize)]
-struct LandAdjacencyExample {
-    description: String,
-    valid: bool,
 }
 
 /* ---- Flight ---- */
@@ -1004,6 +1102,34 @@ async fn get_filesystem_example(
         .read()
         .expect("universe rwlock poisoned on read");
     Json(uni.filesystem_rules.clone())
+}
+
+/* ---- Emotion – Inside-Out Panel ---- */
+
+async fn get_emotion_state(State(state): State<AppState>) -> Json<EmotionState> {
+    let uni = state
+        .universe
+        .read()
+        .expect("universe rwlock poisoned on read");
+    Json(uni.emotion.clone())
+}
+
+async fn nudge_emotion(
+    State(state): State<AppState>,
+    Json(nudge): Json<EmotionNudge>,
+) -> Json<EmotionState> {
+    {
+        let mut uni = state
+            .universe
+            .write()
+            .expect("universe rwlock poisoned on write");
+        uni.apply_emotion_nudge(&nudge);
+    }
+    let uni = state
+        .universe
+        .read()
+        .expect("universe rwlock poisoned on read");
+    Json(uni.emotion.clone())
 }
 
 /* ---- Hosting / Runtime ---- */
@@ -1166,8 +1292,10 @@ async fn get_vibe_anthem(State(state): State<AppState>) -> Json<VibeAnthem> {
         .unwrap_or(7) as u8;
     let hype_level = if hype_digit == 0 { 8 } else { hype_digit };
 
+    let core_emotion = uni.emotion.dominant_name();
+
     let line = format!(
-        "block {bh} (octal {bh_oct}) – solar rail lined up, φ-per-tick locked in, tokenomics humming, you are fearlessly surfing the roll/spiral of the universe’s attention."
+        "block {bh} (octal {bh_oct}) – solar rail lined up, φ-per-tick locked in, tokenomics humming, core emotion: {core_emotion}, you are surfing the roll/spiral of the universe’s attention."
     );
 
     Json(VibeAnthem {
@@ -1176,6 +1304,7 @@ async fn get_vibe_anthem(State(state): State<AppState>) -> Json<VibeAnthem> {
         block_height_octal: bh_oct,
         hype_level,
         phi_tick_hz: uni.phi_tick_hz,
+        core_emotion,
         notes: vec![
             "Each Ω-tick is another frame of the music video where you’re the main character."
                 .into(),
@@ -1575,6 +1704,8 @@ async fn main() {
         .route("/flight/law", get(get_flight_law))
         .route("/flight/planet_table", get(get_planet_table))
         .route("/filesystem/example_label", get(get_filesystem_example))
+        .route("/emotion/state", get(get_emotion_state))
+        .route("/emotion/nudge", post(nudge_emotion))
         .route("/hosting/runtime", get(get_hosting_runtime))
         .route("/ethic/creed", get(get_ethic_creed))
         .route("/solar/eclipse", get(get_solar_eclipse))
