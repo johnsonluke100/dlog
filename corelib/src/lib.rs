@@ -1,6 +1,7 @@
 // corelib/src/lib.rs
 //
-// Universe state machine + φ-gravity + Ω filesystem helpers + landlocks + tick tuning.
+// Universe state machine + φ-gravity + Ω filesystem helpers + landlocks +
+// Minecraft bridge.
 //
 // - In-memory maps for label balances.
 // - Simple transfer logic.
@@ -10,17 +11,31 @@
 // - LabelUniversePath constructor for Ω paths.
 // - Land lock registry in-memory.
 // - compute_tick_tuning to map server φ-ticks → client frames.
+// - McPlayerState + UniverseState.mc_players to track game clients,
+//   with register_mc_player() using NodeConfig.phi_tick_rate.
 
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use spec::{
-    Balance, BlockHeight, LabelId, LabelUniversePath, LandLock, PhiGravityProfile, PlanetSpec,
-    SpecError, TickTuning, TransferTx, UniverseSnapshot,
+    Balance, BlockHeight, LabelId, LabelUniversePath, LandLock, McClientId, McRegisterRequest,
+    NodeConfig, PhiGravityProfile, PlanetSpec, SpecError, TickTuning, TransferTx, UniverseSnapshot,
 };
 
 /// PHI = golden ratio, used as the Ω scaling constant.
 pub const PHI: f64 = 1.618_033_988_749_895_f64;
+
+/// Runtime state for a single Minecraft player.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McPlayerState {
+    pub client_id: McClientId,
+    pub nickname: Option<String>,
+    pub planet_id: String,
+    pub world: String,
+    pub last_fps: f64,
+    pub last_seen_ms: i64,
+    pub last_tuning: TickTuning,
+}
 
 /// UniverseState (temporary, in-memory only).
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -31,6 +46,8 @@ pub struct UniverseState {
     pub land_locks: Vec<LandLock>,
     /// The last known snapshot, if any.
     pub last_snapshot: Option<UniverseSnapshot>,
+    /// Minecraft clients known to this node, keyed by player_uuid.
+    pub mc_players: HashMap<String, McPlayerState>,
 }
 
 impl UniverseState {
@@ -40,6 +57,7 @@ impl UniverseState {
             balances: HashMap::new(),
             land_locks: Vec::new(),
             last_snapshot: None,
+            mc_players: HashMap::new(),
         }
     }
 
@@ -57,12 +75,6 @@ impl UniverseState {
     }
 
     /// Apply a simple transfer transaction.
-    ///
-    /// Placeholder for now; later we integrate:
-    /// - holder interest
-    /// - miner inflation
-    /// - tithe flows
-    /// - device / label limits
     pub fn apply_transfer(&mut self, tx: &TransferTx) -> Result<(), SpecError> {
         if tx.amount == 0 {
             return Err(SpecError::InvalidAmount);
@@ -148,9 +160,6 @@ impl UniverseState {
     }
 
     /// Mint a new land lock into the universe.
-    ///
-    /// If `lock.id` is empty, we assign a simple deterministic id
-    /// based on world/x/z/tier.
     pub fn mint_lock(&mut self, mut lock: LandLock) -> LandLock {
         if lock.id.is_empty() {
             lock.id = format!("{}:{}:{}:{}", lock.world, lock.x, lock.z, lock.tier);
@@ -158,16 +167,49 @@ impl UniverseState {
         self.land_locks.push(lock.clone());
         lock
     }
+
+    /// Register or update a Minecraft player according to a McRegisterRequest.
+    ///
+    /// Uses the NodeConfig.phi_tick_rate and the planet's φ exponents to compute
+    /// TickTuning for this client, then stores it into mc_players.
+    pub fn register_mc_player(
+        &mut self,
+        config: &NodeConfig,
+        req: &McRegisterRequest,
+    ) -> Result<McPlayerState, SpecError> {
+        if req.client_fps <= 0.0 {
+            return Err(SpecError::Generic(
+                "client_fps must be > 0 in McRegisterRequest".to_string(),
+            ));
+        }
+
+        let tuning = compute_tick_tuning(config.phi_tick_rate, req.client_fps, &req.planet_id)
+            .ok_or_else(|| {
+                SpecError::Generic(format!("unknown planet id '{}'", req.planet_id))
+            })?;
+
+        let client_id = McClientId {
+            player_uuid: req.player_uuid.clone(),
+        };
+
+        let state = McPlayerState {
+            client_id,
+            nickname: req.nickname.clone(),
+            planet_id: req.planet_id.clone(),
+            world: req.world.clone(),
+            last_fps: req.client_fps,
+            last_seen_ms: Self::current_timestamp_ms(),
+            last_tuning: tuning.clone(),
+        };
+
+        self.mc_players
+            .insert(req.player_uuid.clone(), state.clone());
+
+        Ok(state)
+    }
 }
 
 /// Default Ω planets with φ exponents for fall and fly.
-///
-/// You can tune these exponents to feel right in-game.
-/// Rough sketch:
-/// - Earth: baseline.
-/// - Moon: softer fall, snappier fly.
-/// - Mars: somewhere in between, more drift.
-/// - Sun: extreme (mostly for lore / special zones).
 pub fn default_planets() -> Vec<PlanetSpec> {
     vec![
         PlanetSpec {

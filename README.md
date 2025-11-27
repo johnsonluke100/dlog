@@ -3,8 +3,8 @@
 Root Rust workspace for the dlog universe.
 
 Crates:
-- `spec`    → shared types and models (labels, balances, planets, Ω paths, landlocks, tick tuning)
-- `corelib` → universe logic (state machine, balances, snapshots, φ-gravity, Ω helpers, land registry, tick tuning)
+- `spec`    → shared types and models (labels, balances, landlocks, planets, Ω paths, tick tuning, MC bridge types)
+- `corelib` → universe logic (state machine, balances, snapshots, φ-gravity, Ω helpers, land registry, MC player state)
 - `api`     → HTTP server exposing the node API
 
 Top-level:
@@ -25,5 +25,6 @@ HTTP endpoints (current sketch):
 - `GET  /omega/label_path?phone=&label=`
 - `GET  /land/locks?world=`
 - `POST /land/mint`
+- `POST /mc/register`  (Minecraft client → tuned φ flight/fall per frame)
 
 Use `dlog.command` on the Desktop as the only launcher.

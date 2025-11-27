@@ -5,18 +5,20 @@
 // - GET  /config
 // - GET  /snapshot
 // - GET  /balance?phone=&label=
-// - POST /transfer              (body: TransferTx JSON)
-// - GET  /planets               (list φ-planet specs)
-// - GET  /phi_gravity?id=earth  (φ^?-per-tick gravity profile)
-// - GET  /ticks/tune?fps=&planet= (FPS-aware φ tick tuning)
-// - GET  /omega/master_root     (UniverseSnapshot, 9∞ root style)
-// - GET  /omega/label_path?phone=&label= (Ω LabelUniversePath)
-// - GET  /land/locks?world=     (list land locks, optional world filter)
-// - POST /land/mint             (mint a land lock)
+// - POST /transfer
+// - GET  /planets
+// - GET  /phi_gravity?id=earth
+// - GET  /ticks/tune?fps=&planet=
+// - GET  /omega/master_root
+// - GET  /omega/label_path?phone=&label=
+// - GET  /land/locks?world=
+// - POST /land/mint
+// - POST /mc/register
 //
-// Later:
-// - add auth integration
-// - wire in real persistence and ∞ filesystem folding/unfolding.
+// /mc/register is the Minecraft bridge endpoint.
+// The plugin sends:
+//   { player_uuid, nickname?, planet_id, world, client_fps }
+// The node responds with TickTuning for that player.
 
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -31,8 +33,9 @@ use corelib::{
 };
 use serde::{Deserialize, Serialize};
 use spec::{
-    Balance, BalanceView, LabelId, LabelUniversePath, LandLock, NodeConfig, PhiGravityProfile,
-    PlanetSpec, TickTuning, TransferTx, UniverseSnapshot,
+    Balance, BalanceView, LabelId, LabelUniversePath, LandLock, McRegisterRequest,
+    McRegisterResponse, NodeConfig, PhiGravityProfile, PlanetSpec, TickTuning, TransferTx,
+    UniverseSnapshot,
 };
 
 #[derive(Clone)]
@@ -121,7 +124,6 @@ async fn main() {
         println!("api: public_url = {}", url);
     }
 
-    // Resolve bind address up front; fall back if parse fails.
     let bind_addr: SocketAddr = config
         .bind_addr
         .parse()
@@ -161,6 +163,7 @@ async fn main() {
         .route("/omega/label_path", get(omega_label_path))
         .route("/land/locks", get(land_locks))
         .route("/land/mint", post(land_mint))
+        .route("/mc/register", post(mc_register))
         .with_state(state);
 
     println!("api: listening on http://{bind_addr}");
@@ -268,8 +271,6 @@ async fn phi_gravity(Query(q): Query<PlanetQuery>) -> Json<PhiGravityResponse> {
 
 /// FPS-aware φ tick tuning:
 /// GET /ticks/tune?fps=&planet=
-/// - fps    = client frames per second (float)
-/// - planet = planet id (e.g. "earth")
 async fn ticks_tune(
     State(state): State<AppState>,
     Query(q): Query<TickTuneQuery>,
@@ -300,7 +301,6 @@ async fn ticks_tune(
 }
 
 /// 9∞ master root-style endpoint.
-/// For now this just folds a new snapshot (incrementing height) and returns it.
 async fn omega_master_root(
     State(state): State<AppState>,
 ) -> Json<UniverseSnapshot> {
@@ -311,7 +311,6 @@ async fn omega_master_root(
 
 /// Ω label universe path endpoint:
 /// GET /omega/label_path?phone=&label=
-/// → { phone, label, path: ";phone;label;∞;…;hash;" }
 async fn omega_label_path(Query(q): Query<BalanceQuery>) -> Json<LabelUniversePath> {
     let view = label_universe_path(&q.phone, &q.label);
     Json(view)
@@ -331,15 +330,6 @@ async fn land_locks(
 
 /// Mint a new land lock into the universe.
 /// POST /land/mint
-/// Body: {
-///   "owner_phone": "9132077554",
-///   "world": "earth_shell",
-///   "tier": "emerald",
-///   "x": 0,
-///   "z": 0,
-///   "size": 16,
-///   "zillow_estimate_amount": 123456
-/// }
 async fn land_mint(
     State(state): State<AppState>,
     Json(req): Json<LandMintRequest>,
@@ -363,4 +353,40 @@ async fn land_mint(
         error: None,
         lock: Some(minted),
     })
+}
+
+/// POST /mc/register
+///
+/// Body:
+/// {
+///   "player_uuid": "some-uuid",
+///   "nickname": "LukeSkywalker",
+///   "planet_id": "earth",
+///   "world": "world",
+///   "client_fps": 144.0
+/// }
+///
+/// Returns:
+/// {
+///   "ok": true,
+///   "error": null,
+///   "tuning": { TickTuning ... }
+/// }
+async fn mc_register(
+    State(state): State<AppState>,
+    Json(req): Json<McRegisterRequest>,
+) -> Json<McRegisterResponse> {
+    let mut guard = state.universe.lock().expect("universe lock poisoned");
+    match guard.register_mc_player(&state.config, &req) {
+        Ok(player_state) => Json(McRegisterResponse {
+            ok: true,
+            error: None,
+            tuning: Some(player_state.last_tuning),
+        }),
+        Err(e) => Json(McRegisterResponse {
+            ok: false,
+            error: Some(e.to_string()),
+            tuning: None,
+        }),
+    }
 }

@@ -6,6 +6,7 @@
 // - Planets + φ-gravity profiles
 // - Ω filesystem helpers (label universe path)
 // - Tick tuning model (how φ-ticks map to client frames)
+// - Minecraft bridge request/response types
 
 use serde::{Deserialize, Serialize};
 
@@ -30,7 +31,6 @@ pub struct Balance {
 }
 
 /// Simple representation of a land lock.
-/// This will get richer as we expand the land system.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LandLock {
     pub id: String,
@@ -53,8 +53,7 @@ pub struct UniverseSnapshot {
     pub timestamp_ms: i64,
 }
 
-/// Simple transfer transaction placeholder; will grow over time
-/// into the full transaction set for dlog.
+/// Simple transfer transaction placeholder.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransferTx {
     pub from: LabelId,
@@ -149,6 +148,35 @@ pub struct LabelUniversePath {
     pub phone: String,
     pub label: String,
     pub path: String,
+}
+
+/// Minimal Minecraft client identifier.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McClientId {
+    /// Minecraft player UUID as a string.
+    pub player_uuid: String,
+}
+
+/// Request from a Minecraft client to register / tune itself.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McRegisterRequest {
+    pub player_uuid: String,
+    pub nickname: Option<String>,
+    /// Planet id, e.g. "earth", "moon".
+    pub planet_id: String,
+    /// World name as seen in the server, e.g. "world", "earth_shell".
+    pub world: String,
+    /// Client frames per second (as measured by the plugin).
+    pub client_fps: f64,
+}
+
+/// Response to /mc/register.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McRegisterResponse {
+    pub ok: bool,
+    pub error: Option<String>,
+    /// φ tick tuning for this client on this planet.
+    pub tuning: Option<TickTuning>,
 }
 
 /// Errors that can occur when we apply high-level actions.
