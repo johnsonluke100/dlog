@@ -4,6 +4,7 @@ members = [
     "corelib",
     "core",
     "omega",
+    "sky",
     "api",
 ]
 resolver = "2"

@@ -1,4 +1,7 @@
 //! Shared types and constants for the DLOG / Ω universe.
+//!
+//! This also carries the "descriptor" side for sky / slideshow state,
+//! while the heavy lifting is done in the `dlog-sky` crate.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -99,4 +102,48 @@ impl Default for UniverseConfig {
 pub struct UniverseSnapshot {
     pub height: BlockHeight,
     pub accounts: HashMap<Address, AccountState>,
+}
+
+//////////////////////////////////////////
+// Sky descriptor side (ported from `sky`)
+//////////////////////////////////////////
+
+/// One slide in a sky slideshow, referencing an image path and duration.
+///
+/// Think of this as the "ProcessedImage" / "SlideshowFrame" pairing
+/// from your SkyLighting Java world, but stripped to metadata only.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkySlideRef {
+    pub id: u32,
+    /// Relative path, e.g. "slides/1.jpg"
+    pub path: String,
+    /// How many phi-ticks this slide should be displayed.
+    pub duration_ticks: u64,
+}
+
+/// A sky show (slideshow) bound to a label / world key.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkyShowConfig {
+    pub name: String,
+    pub slides: Vec<SkySlideRef>,
+}
+
+impl SkyShowConfig {
+    /// Convenience: make a default 8-frame show: 1.jpg..8.jpg,
+    /// each shown for the same duration.
+    pub fn default_eight() -> Self {
+        let duration_ticks = 8_888; // one second at 8_888 Hz as a starting point
+        let mut slides = Vec::new();
+        for id in 1u32..=8 {
+            slides.push(SkySlideRef {
+                id,
+                path: format!("slides/{}.jpg", id),
+                duration_ticks,
+            });
+        }
+        Self {
+            name: "default_eight".to_string(),
+            slides,
+        }
+    }
 }

@@ -6,16 +6,19 @@ use axum::{
 use dlog_core::init_universe;
 use dlog_corelib::{UniverseError, UniverseState};
 use dlog_spec::{Address, Amount};
+use dlog_sky::SkyTimeline;
 use serde::{Deserialize, Serialize};
 use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
+    time::{SystemTime, UNIX_EPOCH},
 };
 use tracing_subscriber::EnvFilter;
 
 #[derive(Clone)]
 struct AppState {
     universe: Arc<Mutex<UniverseState>>,
+    sky: Arc<Mutex<SkyTimeline>>,
 }
 
 #[derive(Serialize)]
@@ -43,6 +46,14 @@ struct TransferResponse {
     error: Option<String>,
 }
 
+#[derive(Serialize)]
+struct SkyCurrentResponse {
+    tick: u64,
+    slide_id: u32,
+    path: String,
+    duration_ticks: u64,
+}
+
 #[tokio::main]
 async fn main() {
     // Logging / tracing
@@ -53,18 +64,23 @@ async fn main() {
     // For now just bind to 127.0.0.1:8888; same as dlog.toml.
     let addr: SocketAddr = "127.0.0.1:8888".parse().expect("valid socket addr");
 
+    // Universe + sky init
     let universe = init_universe();
+    let tick_hz = universe.config.phi_tick_hz;
+
     let state = AppState {
         universe: Arc::new(Mutex::new(universe)),
+        sky: Arc::new(Mutex::new(SkyTimeline::default_eight())),
     };
 
     let app = Router::new()
         .route("/health", get(health))
         .route("/height", get(height))
         .route("/transfer", post(transfer))
+        .route("/sky/current", get(sky_current))
         .with_state(state);
 
-    tracing::info!("dlog-api listening on http://{addr}");
+    tracing::info!("dlog-api listening on http://{addr} (phi_tick_hz={tick_hz})");
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
@@ -112,4 +128,29 @@ async fn transfer(
     };
 
     Json(TransferResponse { ok, error })
+}
+
+async fn sky_current(State(state): State<AppState>) -> Json<SkyCurrentResponse> {
+    let universe = state.universe.lock().expect("universe lock poisoned");
+    let tick_hz = universe.config.phi_tick_hz;
+    drop(universe);
+
+    // Use wall-clock to pick a frame: ticks = seconds * phi_tick_hz.
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let ticks = (now.as_secs_f64() * tick_hz).floor() as u64;
+
+    let sky = state.sky.lock().expect("sky lock poisoned");
+    let slide = sky
+        .slide_at_tick(ticks)
+        .cloned()
+        .unwrap_or_else(|| dlog_spec::SkyShowConfig::default_eight().slides[0].clone());
+
+    Json(SkyCurrentResponse {
+        tick: ticks,
+        slide_id: slide.id,
+        path: slide.path,
+        duration_ticks: slide.duration_ticks,
+    })
 }

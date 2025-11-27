@@ -13,3 +13,4 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 dlog-spec = { path = "../spec" }
 dlog-corelib = { path = "../corelib" }
 dlog-core = { path = "../core" }
+dlog-sky = { path = "../sky" }

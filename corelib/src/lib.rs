@@ -1,6 +1,6 @@
 //! Core logic for the DLOG / Ω universe state machine.
 
-use dlog_spec::{AccountState, Address, Amount, PlanetId, UniverseConfig, UniverseSnapshot, PHI};
+use dlog_spec::{AccountState, Address, Amount, PlanetId, UniverseConfig, UniverseSnapshot};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
