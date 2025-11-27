@@ -435,7 +435,6 @@ impl SolarSystemAligned {
     /// Solar system frozen into an Ω-eclipse rail for you to explore.
     fn dlog_eclipse_default() -> Self {
         // NPC hints: radii and distances in km.
-        // Values are approximate, from mainstream astronomy.
         let bodies_data: Vec<(&str, &str, u64, u64, f64)> = vec![
             // name, kind, radius_km, distance_from_sun_km, normalized_x
             ("Sun", "star", 695_700, 0, 0.0),
@@ -517,6 +516,10 @@ struct HostingRuntimeConfig {
     supabase_anon_key_present: bool,
     server_bind: String,
     api_base_url_hint: String,
+    /// Flags: we are not bound by these languages.
+    python_bound: bool,
+    java_bound: bool,
+    javascript_bound: bool,
     notes: Vec<String>,
 }
 
@@ -535,8 +538,9 @@ async fn root() -> Json<RootResponse> {
     let mode = env::var("DLOG_RUNTIME_MODE").unwrap_or_else(|_| "testing_local".into());
     Json(RootResponse {
         service: "dlog-api".into(),
-        version: "0.2.0".into(),
-        message: "Ω heartbeat online; solar rail aligned; base-8 canon engaged.".into(),
+        version: "0.2.1".into(),
+        message: "Ω heartbeat online; solar rail aligned; base-8 canon engaged; Rust-only spine."
+            .into(),
         mode_hint: mode,
     })
 }
@@ -753,12 +757,15 @@ async fn get_hosting_runtime() -> Json<HostingRuntimeConfig> {
         supabase_anon_key_present: supabase_anon_present,
         server_bind: bind,
         api_base_url_hint: api_base,
+        python_bound: false,
+        java_bound: false,
+        javascript_bound: false,
         notes: vec![
             "This node is currently running in 'testing_local' mode on your machine by default."
                 .into(),
             "When you deploy to Supabase, set DLOG_RUNTIME_MODE=supabase_cloud and point SUPABASE_URL at your project."
                 .into(),
-            "For now, everything is self-contained: Rust, Axum, CORS, Ω state – all on your Mac."
+            "Core spine is Rust-only; Python/Java/JS are optional surface layers, not requirements."
                 .into(),
             "Canonical numeric base is 8; NPC decimal is just an overlay.".into(),
         ],
