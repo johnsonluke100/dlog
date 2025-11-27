@@ -39,6 +39,7 @@ struct UniverseInner {
     land_rules: LandRules,
     flight_rules: FlightRules,
     filesystem_rules: FilesystemRules,
+    ethic_creed: EthicCreed,
 }
 
 impl UniverseInner {
@@ -56,6 +57,7 @@ impl UniverseInner {
             land_rules: LandRules::dlog_default(),
             flight_rules: FlightRules::dlog_default(phi_val),
             filesystem_rules: FilesystemRules::dlog_default(),
+            ethic_creed: EthicCreed::dlog_default(),
         }
     }
 
@@ -71,6 +73,7 @@ impl UniverseInner {
             gift_rules: self.gift_rules.clone(),
             airdrop_rules: self.airdrop_rules.clone(),
             device_rules: self.device_rules.clone(),
+            ethic_creed: self.ethic_creed.clone(),
         }
     }
 }
@@ -344,6 +347,36 @@ impl FilesystemRules {
     }
 }
 
+/* ========= Ethic / Magic-Mirror Creed ========= */
+
+#[derive(Debug, Clone, Serialize)]
+struct EthicCreed {
+    motto: String,
+    polarity: String,
+    description: String,
+    notes: Vec<String>,
+}
+
+impl EthicCreed {
+    fn dlog_default() -> Self {
+        Self {
+            motto: ";🌟 i borrow everything from evil and i serve everything to good 🌟;"
+                .into(),
+            polarity: "transmutation".into(),
+            description: "Anything tagged as \"evil\" is just raw potential. The system's job is to borrow that energy, transmute it, and serve the result to good, to players, and to the world."
+                .into(),
+            notes: vec![
+                "No worship of evil – only recycling of its energy to serve good."
+                    .into(),
+                "Abuse, scams, and harm get reflected and drained, not amplified."
+                    .into(),
+                "This creed is Ω-law, not NPC-law; it shapes how we design rewards, penalties, and social gameplay."
+                    .into(),
+            ],
+        }
+    }
+}
+
 /* ========= Snapshots & DTOs ========= */
 
 #[derive(Debug, Clone, Serialize)]
@@ -354,6 +387,7 @@ struct UniverseSnapshot {
     gift_rules: GiftRules,
     airdrop_rules: AirdropNetworkRules,
     device_rules: DeviceOutflowRules,
+    ethic_creed: EthicCreed,
 }
 
 #[derive(Debug, Serialize)]
@@ -607,6 +641,14 @@ async fn get_hosting_runtime() -> Json<HostingRuntimeConfig> {
     })
 }
 
+async fn get_ethic_creed(State(state): State<AppState>) -> Json<EthicCreed> {
+    let uni = state
+        .universe
+        .read()
+        .expect("universe rwlock poisoned on read");
+    Json(uni.ethic_creed.clone())
+}
+
 /* ========= Bootstrap ========= */
 
 #[tokio::main]
@@ -647,6 +689,7 @@ async fn main() {
         .route("/flight/planet_table", get(get_planet_table))
         .route("/filesystem/example_label", get(get_filesystem_example))
         .route("/hosting/runtime", get(get_hosting_runtime))
+        .route("/ethic/creed", get(get_ethic_creed))
         .with_state(state)
         // Very loose CORS for local dev; lock this down later.
         .layer(CorsLayer::very_permissive());
