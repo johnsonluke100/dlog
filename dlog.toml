@@ -1,25 +1,8 @@
-# dlog.toml – Ω node config for this machine
+[node]
+name = "luke-desktop"
+bind = "0.0.0.0:8888"
 
-[name]
-# Human-friendly node name; purely cosmetic.
-node_name = "luke-desktop-testing"
-
-[network]
-# Bind + port must match DLOG_BIND / DLOG_PORT env unless you override in code.
-bind = "127.0.0.1"
-port = 8888
-
-[phi]
-# Canonical Ω tick rate; server is allowed to skip/sparsify ticks for clients.
-tick_hz = 1000.0
-# Canonical numeric base for this universe.
-base = 8
-
-[hosting]
-# testing_local  → your Mac
-# container_supabase → Docker/Compose in the cloud
-# supabase_cloud → fully managed Supabase deployment
-mode = "testing_local"
-
-# Optional hint; code treats empty as "no external host yet".
-supabase_url = ""
+[clock]
+# Conceptual φ-tick frequency. 1000 here nods to monitor Hz, but the
+# actual Ω-tick is about attention, not seconds.
+phi_tick_hz = 1000.0

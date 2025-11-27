@@ -1,8 +1,8 @@
 [package]
-name = "dlog-spec"
-version = "0.5.0"
+name = "spec"
+version = "0.1.0"
 edition = "2021"
+description = "DLOG / Ω-universe shared spec types (no IO)"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"

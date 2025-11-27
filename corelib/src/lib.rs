@@ -1,101 +1,63 @@
-//! Core logic for the DLOG / Ω universe state machine.
+//! Core DLOG Ω state machine utilities.
+//!
+//! This crate stays pure & deterministic: no IO, no sockets.
+//! It knows how to:
+//! - Represent a universe snapshot (block height + balances)
+//! - Apply φ-based holder interest over N blocks
+//! - Render block height as base-8 text for UI/logs
 
-use dlog_spec::{AccountState, Address, Amount, PlanetId, UniverseConfig, UniverseSnapshot};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use thiserror::Error;
 
-/// Errors that can occur when mutating universe state.
-#[derive(Debug, Error)]
-pub enum UniverseError {
-    #[error("insufficient balance")]
-    InsufficientBalance,
-    #[error("unknown account")]
-    UnknownAccount,
-}
+use spec::{LabelId, MonetarySpec};
 
-/// Mutable universe state kept in memory.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UniverseState {
+/// Snapshot of balances at a given block height.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UniverseSnapshot {
+    /// Height of the chain / attention sweep.
     pub height: u64,
-    pub accounts: HashMap<Address, AccountState>,
-    pub config: UniverseConfig,
+    /// Scalar representation of the 9∞ master root for this block.
+    pub master_root_scalar: String,
+    /// Balances per (phone,label) universe.
+    pub balances: HashMap<LabelId, f64>,
 }
 
-impl UniverseState {
-    pub fn new(config: UniverseConfig) -> Self {
+impl UniverseSnapshot {
+    /// Start from an empty universe.
+    pub fn empty() -> Self {
         Self {
             height: 0,
-            accounts: HashMap::new(),
-            config,
+            master_root_scalar: String::new(),
+            balances: HashMap::new(),
         }
     }
 
-    pub fn snapshot(&self) -> UniverseSnapshot {
-        UniverseSnapshot {
-            height: self.height,
-            accounts: self.accounts.clone(),
-        }
-    }
-
-    pub fn upsert_account(&mut self, account: AccountState) {
-        self.accounts.insert(account.address.clone(), account);
-    }
-
-    fn account_mut(&mut self, addr: &Address) -> Result<&mut AccountState, UniverseError> {
-        self.accounts.get_mut(addr).ok_or(UniverseError::UnknownAccount)
-    }
-
-    pub fn transfer(
-        &mut self,
-        from: &Address,
-        to: &Address,
-        amount: Amount,
-    ) -> Result<(), UniverseError> {
-        if amount.dlog == 0 {
-            return Ok(());
+    /// Apply φ-based holder interest over `blocks_elapsed` blocks.
+    ///
+    /// This directly mirrors the MonetarySpec:
+    /// - holder_yearly_factor ≈ φ
+    /// - blocks_per_attention_year ≈ 3.9M (octal literal in spec)
+    pub fn apply_holder_interest(&mut self, blocks_elapsed: u64, spec: &MonetarySpec) {
+        if blocks_elapsed == 0 {
+            return;
         }
 
-        {
-            let from_acc = self.account_mut(from)?;
-            if from_acc.balance.dlog < amount.dlog {
-                return Err(UniverseError::InsufficientBalance);
-            }
-            from_acc.balance = from_acc.balance.saturating_sub(amount);
+        let yearly = spec.holder_yearly_factor;
+        let blocks_per_year = spec.blocks_per_attention_year as f64;
+
+        // per-block factor = yearly^(1 / blocks_per_year)
+        let per_block = yearly.powf(1.0 / blocks_per_year);
+        let total_factor = per_block.powf(blocks_elapsed as f64);
+
+        for value in self.balances.values_mut() {
+            *value *= total_factor;
         }
 
-        {
-            let to_acc = self
-                .accounts
-                .entry(to.clone())
-                .or_insert(AccountState {
-                    address: to.clone(),
-                    planet: PlanetId::EarthShell,
-                    balance: Amount::ZERO,
-                });
-            to_acc.balance = to_acc.balance.saturating_add(amount);
-        }
-
-        Ok(())
+        self.height = self.height.saturating_add(blocks_elapsed);
     }
+}
 
-    /// Apply one phi-based holder-interest tick to all balances.
-    pub fn apply_interest_tick(&mut self) {
-        let ticks_per_year = self.config.phi_tick_hz * 3600.0 * 24.0 * 365.0;
-        let base = 1.618_f64;
-        let r_per_year = base - 1.0; // ~0.618
-        let r_per_tick = r_per_year / ticks_per_year.max(1.0);
-
-        for account in self.accounts.values_mut() {
-            let before = account.balance.dlog as f64;
-            let after = before * (1.0 + r_per_tick);
-            account.balance.dlog = after.round() as u128;
-        }
-    }
-
-    /// Advance one "block"/attention tick.
-    pub fn tick_block(&mut self) {
-        self.height = self.height.saturating_add(1);
-        self.apply_interest_tick();
-    }
+/// Convert a block height into a base-8 string for UI / logging.
+pub fn octal_height(height: u64) -> String {
+    format!("{:o}", height)
 }

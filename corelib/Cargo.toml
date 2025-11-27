@@ -1,10 +1,9 @@
 [package]
-name = "dlog-corelib"
-version = "0.5.0"
+name = "corelib"
+version = "0.1.0"
 edition = "2021"
+description = "Core DLOG Ω state machine helpers"
 
 [dependencies]
-dlog-spec = { path = "../spec" }
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-thiserror = "1.0"
+spec = { path = "../spec" }
