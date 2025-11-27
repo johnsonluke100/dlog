@@ -1,19 +1,21 @@
 // corelib/src/lib.rs
 //
-// Universe state machine + φ-gravity + Ω filesystem helpers.
+// Universe state machine + φ-gravity + Ω filesystem helpers + landlocks.
 //
 // - In-memory maps for label balances.
 // - Simple transfer logic.
-// - Snapshot folding that increments a height counter.
+// - Snapshot folding that increments a height counter,
+//   with a 9∞-style master_root string.
 // - Planet list and φ^?-per-tick gravity profiles.
 // - LabelUniversePath constructor for Ω paths.
+// - Land lock registry in-memory.
 
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use spec::{
-    Balance, LabelId, LabelUniversePath, PhiGravityProfile, PlanetSpec, SpecError, TransferTx,
-    UniverseSnapshot,
+    Balance, BlockHeight, LabelId, LabelUniversePath, LandLock, PhiGravityProfile, PlanetSpec,
+    SpecError, TransferTx, UniverseSnapshot,
 };
 
 /// PHI = golden ratio, used as the Ω scaling constant.
@@ -24,6 +26,8 @@ pub const PHI: f64 = 1.618_033_988_749_895_f64;
 pub struct UniverseState {
     /// Balance per label.
     pub balances: HashMap<LabelId, Balance>,
+    /// Registered land locks.
+    pub land_locks: Vec<LandLock>,
     /// The last known snapshot, if any.
     pub last_snapshot: Option<UniverseSnapshot>,
 }
@@ -33,6 +37,7 @@ impl UniverseState {
     pub fn new() -> Self {
         Self {
             balances: HashMap::new(),
+            land_locks: Vec::new(),
             last_snapshot: None,
         }
     }
@@ -83,18 +88,21 @@ impl UniverseState {
     }
 
     /// Fold the current state into a UniverseSnapshot.
-    /// For now we just bump the height and store a simple string as the root.
+    /// We bump the height and encode a 9∞-style master root.
     pub fn fold_snapshot(&mut self) -> UniverseSnapshot {
-        let new_height = self
+        let new_height: BlockHeight = self
             .last_snapshot
             .as_ref()
             .map(|s| s.height + 1)
             .unwrap_or(0);
 
+        let timestamp_ms = Self::current_timestamp_ms();
+        let master_root = Self::encode_master_root(new_height, timestamp_ms);
+
         let snapshot = UniverseSnapshot {
             height: new_height,
-            master_root: format!(";∞;height;{};", new_height),
-            timestamp_ms: Self::current_timestamp_ms(),
+            master_root,
+            timestamp_ms,
         };
 
         self.last_snapshot = Some(snapshot.clone());
@@ -107,6 +115,47 @@ impl UniverseState {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
         now.as_millis() as i64
+    }
+
+    /// Encode the 9∞ master root string for a given height/timestamp.
+    ///
+    /// Pattern:
+    /// ;∞;∞;∞;∞;∞;∞;∞;∞;∞;height;<H>;time;<T>;
+    fn encode_master_root(height: BlockHeight, timestamp_ms: i64) -> String {
+        format!(
+            ";∞;∞;∞;∞;∞;∞;∞;∞;∞;height;{};time;{};",
+            height, timestamp_ms
+        )
+    }
+
+    /// Immutable view of all land locks.
+    pub fn all_land_locks(&self) -> &[LandLock] {
+        &self.land_locks
+    }
+
+    /// Return all land locks, optionally filtered by world.
+    pub fn locks_by_world(&self, world: Option<&str>) -> Vec<LandLock> {
+        match world {
+            Some(w) => self
+                .land_locks
+                .iter()
+                .filter(|l| l.world == w)
+                .cloned()
+                .collect(),
+            None => self.land_locks.clone(),
+        }
+    }
+
+    /// Mint a new land lock into the universe.
+    ///
+    /// If `lock.id` is empty, we assign a simple deterministic id
+    /// based on world/x/z/tier.
+    pub fn mint_lock(&mut self, mut lock: LandLock) -> LandLock {
+        if lock.id.is_empty() {
+            lock.id = format!("{}:{}:{}:{}", lock.world, lock.x, lock.z, lock.tier);
+        }
+        self.land_locks.push(lock.clone());
+        lock
     }
 }
 

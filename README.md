@@ -3,8 +3,8 @@
 Root Rust workspace for the dlog universe.
 
 Crates:
-- `spec`    → shared types and models (labels, balances, planets, Ω paths)
-- `corelib` → universe logic (state machine, balances, snapshots, φ-gravity, Ω helpers)
+- `spec`    → shared types and models (labels, balances, planets, Ω paths, landlocks)
+- `corelib` → universe logic (state machine, balances, snapshots, φ-gravity, Ω helpers, land registry)
 - `api`     → HTTP server exposing the node API
 
 Top-level:

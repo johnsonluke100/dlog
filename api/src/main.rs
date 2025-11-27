@@ -10,6 +10,8 @@
 // - GET  /phi_gravity?id=earth  (φ^?-per-tick gravity profile)
 // - GET  /omega/master_root     (UniverseSnapshot, 9∞ root style)
 // - GET  /omega/label_path?phone=&label= (Ω LabelUniversePath)
+// - GET  /land/locks?world=     (list land locks, optional world filter)
+// - POST /land/mint             (mint a land lock)
 //
 // Later:
 // - add auth integration
@@ -23,11 +25,13 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use corelib::{compute_phi_gravity, default_planets, label_universe_path, UniverseState};
+use corelib::{
+    compute_phi_gravity, default_planets, label_universe_path, UniverseState,
+};
 use serde::{Deserialize, Serialize};
 use spec::{
-    Balance, BalanceView, LabelId, LabelUniversePath, NodeConfig, PhiGravityProfile, PlanetSpec,
-    TransferTx, UniverseSnapshot,
+    Balance, BalanceView, LabelId, LabelUniversePath, LandLock, NodeConfig, PhiGravityProfile,
+    PlanetSpec, TransferTx, UniverseSnapshot,
 };
 
 #[derive(Clone)]
@@ -47,6 +51,23 @@ struct PlanetQuery {
     id: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct LandListQuery {
+    /// Optional world filter, e.g. "earth_shell"
+    world: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LandMintRequest {
+    pub owner_phone: String,
+    pub world: String,
+    pub tier: String,
+    pub x: i64,
+    pub z: i64,
+    pub size: i32,
+    pub zillow_estimate_amount: u128,
+}
+
 #[derive(Debug, Serialize)]
 struct TransferResponse {
     ok: bool,
@@ -60,6 +81,18 @@ struct PhiGravityResponse {
     ok: bool,
     error: Option<String>,
     profile: Option<PhiGravityProfile>,
+}
+
+#[derive(Debug, Serialize)]
+struct LandMintResponse {
+    ok: bool,
+    error: Option<String>,
+    lock: Option<LandLock>,
+}
+
+#[derive(Debug, Serialize)]
+struct LandListResponse {
+    locks: Vec<LandLock>,
 }
 
 #[tokio::main]
@@ -109,6 +142,8 @@ async fn main() {
         .route("/phi_gravity", get(phi_gravity))
         .route("/omega/master_root", get(omega_master_root))
         .route("/omega/label_path", get(omega_label_path))
+        .route("/land/locks", get(land_locks))
+        .route("/land/mint", post(land_mint))
         .with_state(state);
 
     println!("api: listening on http://{bind_addr}");
@@ -230,4 +265,52 @@ async fn omega_master_root(
 async fn omega_label_path(Query(q): Query<BalanceQuery>) -> Json<LabelUniversePath> {
     let view = label_universe_path(&q.phone, &q.label);
     Json(view)
+}
+
+/// List land locks, optionally filtered by world.
+/// GET /land/locks?world=earth_shell
+async fn land_locks(
+    State(state): State<AppState>,
+    Query(q): Query<LandListQuery>,
+) -> Json<LandListResponse> {
+    let guard = state.universe.lock().expect("universe lock poisoned");
+    let world_filter = q.world.as_deref();
+    let locks = guard.locks_by_world(world_filter);
+    Json(LandListResponse { locks })
+}
+
+/// Mint a new land lock into the universe.
+/// POST /land/mint
+/// Body: {
+///   "owner_phone": "9132077554",
+///   "world": "earth_shell",
+///   "tier": "emerald",
+///   "x": 0,
+///   "z": 0,
+///   "size": 16,
+///   "zillow_estimate_amount": 123456
+/// }
+async fn land_mint(
+    State(state): State<AppState>,
+    Json(req): Json<LandMintRequest>,
+) -> Json<LandMintResponse> {
+    let mut guard = state.universe.lock().expect("universe lock poisoned");
+
+    let lock = LandLock {
+        id: String::new(),
+        owner_phone: req.owner_phone,
+        world: req.world,
+        tier: req.tier,
+        x: req.x,
+        z: req.z,
+        size: req.size,
+        zillow_estimate_amount: req.zillow_estimate_amount,
+    };
+
+    let minted = guard.mint_lock(lock);
+    Json(LandMintResponse {
+        ok: true,
+        error: None,
+        lock: Some(minted),
+    })
 }
