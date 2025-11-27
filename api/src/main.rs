@@ -564,14 +564,25 @@ struct VibeAnthem {
     notes: Vec<String>,
 }
 
+/* ========= Fearless Security ========= */
+
+#[derive(Debug, Serialize)]
+struct FearlessSecurity {
+    mantra: String,
+    stance: String,
+    fearless_but_guarded: bool,
+    guardrails: Vec<String>,
+    disclaimers: Vec<String>,
+}
+
 /* ========= Handlers ========= */
 
 async fn root() -> Json<RootResponse> {
     let mode = env::var("DLOG_RUNTIME_MODE").unwrap_or_else(|_| "testing_local".into());
     Json(RootResponse {
         service: "dlog-api".into(),
-        version: "0.2.2".into(),
-        message: "Ω heartbeat online; solar rail aligned; base-8 canon engaged; Rust-only spine; hype rail armed."
+        version: "0.2.3".into(),
+        message: "Ω heartbeat online; solar rail aligned; base-8 canon engaged; Rust-only spine; fearless rail vibing."
             .into(),
         mode_hint: mode,
     })
@@ -919,7 +930,7 @@ async fn get_vibe_anthem(State(state): State<AppState>) -> Json<VibeAnthem> {
     let bh = uni.block_height;
     let bh_oct = to_octal_u64(bh);
 
-    // Simple hype level: last three octal digits → 0–7.
+    // Simple hype level: last octal digit → 1–8.
     let hype_digit = bh_oct
         .chars()
         .last()
@@ -929,7 +940,7 @@ async fn get_vibe_anthem(State(state): State<AppState>) -> Json<VibeAnthem> {
     let hype_level = if hype_digit == 0 { 8 } else { hype_digit };
 
     let line = format!(
-        "block {bh} (octal {bh_oct}) – solar rail lined up, φ-per-tick locked in, you are the camera the universe spawned to admire itself."
+        "block {bh} (octal {bh_oct}) – solar rail lined up, φ-per-tick locked in, you are fearlessly surfing the edge of the universe’s attention."
     );
 
     Json(VibeAnthem {
@@ -939,11 +950,40 @@ async fn get_vibe_anthem(State(state): State<AppState>) -> Json<VibeAnthem> {
         hype_level,
         phi_tick_hz: uni.phi_tick_hz,
         notes: vec![
-            "Every Ω-tick you run this, the hype level can evolve with the octal rail."
+            "Each Ω-tick is another frame of the music video where you’re the main character."
                 .into(),
             "Ethic creed active: ;🌟 i borrow everything from evil and i serve everything to good 🌟;"
                 .into(),
-            "You are not small inside the solar system; the solar system is a local pattern inside your field of attention."
+            "Fearless ≠ reckless – the hype rail runs inside solid guardrails.".into(),
+        ],
+    })
+}
+
+/* ---- Fearless Security ---- */
+
+async fn get_security_fearless() -> Json<FearlessSecurity> {
+    Json(FearlessSecurity {
+        mantra: ";🌟 i borrow everything from evil and i serve everything to good 🌟; we vibe; we are fearless."
+            .into(),
+        stance: "Fearless in play, paranoid in defense. You push limits; the system absorbs blast."
+            .into(),
+        fearless_but_guarded: true,
+        guardrails: vec![
+            "No seed phrases for normal users – keys live behind platform crypto + biometrics."
+                .into(),
+            "New-device φ-based outflow caps – day 1 cannot drain the galaxy.".into(),
+            "giftN labels start hard-locked for 18 days; unlock slowly on a φ spiral."
+                .into(),
+            "Tithe + VORTEX/COMET routing keep core gravity wells funded.".into(),
+            "Land auto-auctions after 256 days of zero visits – dead land gets resurrected."
+                .into(),
+        ],
+        disclaimers: vec![
+            "This JSON is philosophy + config, not legal or financial advice."
+                .into(),
+            "Fearless doesn’t mean invincible; it means you always land on your feet and learn."
+                .into(),
+            "Attackers are treated as fuel – their energy is recycled to harden the system."
                 .into(),
         ],
     })
@@ -996,6 +1036,7 @@ async fn main() {
         .route("/runtime/language_spine", get(get_language_spine))
         .route("/runtime/platforms", get(get_platforms))
         .route("/vibe/anthem", get(get_vibe_anthem))
+        .route("/security/fearless", get(get_security_fearless))
         .with_state(state)
         // Very loose CORS for local dev; lock this down later.
         .layer(CorsLayer::very_permissive());
