@@ -6,8 +6,9 @@ use axum::{
 use dlog_core::init_universe;
 use dlog_corelib::{UniverseError, UniverseState};
 use dlog_spec::{
-    AccessGrant, AccessRole, Address, Amount, DeviceLimitsRules, GiftRules, LandLock, LandTier,
-    MonetaryPolicy, PlanetId,
+    AccessGrant, AccessRole, Address, Amount, AirdropNetworkRules, BlockHeight, DeviceLimitsRules,
+    GenesisConfig, GiftRules, LabelUniverseHash, LabelUniverseKey, LandLock, LandTier, MonetaryPolicy,
+    OmegaFilesystemSnapshot, OmegaMasterRoot, PlanetId,
 };
 use dlog_sky::SkyTimeline;
 use serde::{Deserialize, Serialize};
@@ -66,7 +67,6 @@ struct MoneyPolicyResponse {
 #[derive(Serialize)]
 struct GiftRulesResponse {
     rules: GiftRules,
-    /// Example caps for a few reference days.
     examples: Vec<GiftCapExample>,
 }
 
@@ -98,17 +98,28 @@ struct DeviceCapResponse {
     daily_cap_dlog: u64,
 }
 
+#[derive(Serialize)]
+struct GenesisRootsResponse {
+    genesis: GenesisConfig,
+    airdrop_network: AirdropNetworkRules,
+}
+
+#[derive(Serialize)]
+struct OmegaRootResponse {
+    height: BlockHeight,
+    snapshot: OmegaFilesystemSnapshot,
+}
+
 #[tokio::main]
 async fn main() {
-    // Logging / tracing
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("dlog_api=info".parse().unwrap()))
+        .with_env_filter(
+            EnvFilter::from_default_env().add_directive("dlog_api=info".parse().unwrap()),
+        )
         .init();
 
-    // For now just bind to 127.0.0.1:8888; same as dlog.toml.
     let addr: SocketAddr = "127.0.0.1:8888".parse().expect("valid socket addr");
 
-    // Universe + sky init
     let universe = init_universe();
     let tick_hz = universe.config.phi_tick_hz;
 
@@ -127,6 +138,8 @@ async fn main() {
         .route("/airdrop/gift/daily_cap", get(gift_daily_cap))
         .route("/device/daily_cap", get(device_daily_cap))
         .route("/land/example_lock", get(land_example_lock))
+        .route("/genesis/roots", get(genesis_roots))
+        .route("/omega/root", get(omega_root))
         .with_state(state);
 
     tracing::info!("dlog-api listening on http://{addr} (phi_tick_hz={tick_hz})");
@@ -184,7 +197,6 @@ async fn sky_current(State(state): State<AppState>) -> Json<SkyCurrentResponse> 
     let tick_hz = universe.config.phi_tick_hz;
     drop(universe);
 
-    // Use wall-clock to pick a frame: ticks = seconds * phi_tick_hz.
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
@@ -214,21 +226,13 @@ async fn money_policy() -> Json<MoneyPolicyResponse> {
 
 async fn gift_rules() -> Json<GiftRulesResponse> {
     let rules = GiftRules::default();
-    let examples = vec![
-        0_u32,
-        1,
-        17,
-        18,
-        19,
-        20,
-        30,
-    ]
-    .into_iter()
-    .map(|d| GiftCapExample {
-        days_since_claim: d,
-        daily_cap_dlog: rules.daily_cap(d),
-    })
-    .collect();
+    let examples = vec![0_u32, 1, 17, 18, 19, 20, 30]
+        .into_iter()
+        .map(|d| GiftCapExample {
+            days_since_claim: d,
+            daily_cap_dlog: rules.daily_cap(d),
+        })
+        .collect();
 
     Json(GiftRulesResponse { rules, examples })
 }
@@ -252,7 +256,6 @@ async fn device_daily_cap(Query(q): Query<DeviceCapQuery>) -> Json<DeviceCapResp
 }
 
 async fn land_example_lock() -> Json<LandLock> {
-    // Simple hard-coded example of an Emerald lock on EarthShell at (0,0), 16x16
     let lock = LandLock {
         id: 1,
         owner_phone: "9132077554".to_string(),
@@ -271,4 +274,49 @@ async fn land_example_lock() -> Json<LandLock> {
         in_auction: false,
     };
     Json(lock)
+}
+
+async fn genesis_roots() -> Json<GenesisRootsResponse> {
+    let genesis = GenesisConfig::canon();
+    let network = AirdropNetworkRules::default();
+    Json(GenesisRootsResponse {
+        genesis,
+        airdrop_network: network,
+    })
+}
+
+async fn omega_root(State(state): State<AppState>) -> Json<OmegaRootResponse> {
+    let universe = state.universe.lock().expect("universe lock poisoned");
+    let height = universe.height;
+
+    let master_root = OmegaMasterRoot {
+        scalar: ";∞;∞;∞;∞;∞;∞;∞;∞;∞;".to_string(),
+    };
+
+    let comet_key = LabelUniverseKey {
+        phone: "9132077554".to_string(),
+        label: "comet".to_string(),
+    };
+    let fun_key = LabelUniverseKey {
+        phone: "9132077554".to_string(),
+        label: "fun".to_string(),
+    };
+
+    let label_hashes = vec![
+        LabelUniverseHash {
+            key: comet_key,
+            hash: "omega_hash_comet_v1".to_string(),
+        },
+        LabelUniverseHash {
+            key: fun_key,
+            hash: "omega_hash_fun_v1".to_string(),
+        },
+    ];
+
+    let snapshot = OmegaFilesystemSnapshot {
+        master_root,
+        label_hashes,
+    };
+
+    Json(OmegaRootResponse { height, snapshot })
 }

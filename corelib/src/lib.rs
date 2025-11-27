@@ -80,12 +80,7 @@ impl UniverseState {
     }
 
     /// Apply one phi-based holder-interest tick to all balances.
-    ///
-    /// This approximates 61.8% APY by compounding every phi-tick.
     pub fn apply_interest_tick(&mut self) {
-        // For now, use a simple approximation: one tiny growth per "block".
-        // APY = (1 + r)^(ticks_per_year) - 1 ≈ 0.618
-        // We can refine this later with a real formula or table.
         let ticks_per_year = self.config.phi_tick_hz * 3600.0 * 24.0 * 365.0;
         let base = 1.618_f64;
         let r_per_year = base - 1.0; // ~0.618

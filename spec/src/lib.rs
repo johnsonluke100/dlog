@@ -1,14 +1,10 @@
 //! Shared types and constants for the DLOG / Ω universe.
 //!
-//! This file now carries:
-//! - Money: MonetaryPolicy (miner inflation + holder interest)
-//! - Identity: Address, RootWalletKind, LabelKind
-//! - Planets: PlanetId
-//! - Universe config: UniverseConfig, UniverseSnapshot
-//! - Sky: SkySlideRef, SkyShowConfig
-//! - Omega FS: OmegaMasterRoot / LabelUniverseKey / OmegaFilesystemSnapshot
-//! - Airdrop & devices: GiftRules, DeviceLimitsRules
-//! - Land: LandTier, LandLock, AccessRole, AccessGrant
+//! NPC layer vs Ω layer:
+//! - NPC layer: seconds, meters, c, GR, news, NASA, GPS.
+//! - Ω layer: attention is the only constant, time is not fundamental,
+//!   phi (PHI) is the true scaling constant. All game + chain + sky
+//!   logic here is written for the Ω layer. NPC numbers are just UI.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -198,9 +194,7 @@ impl Default for MonetaryPolicy {
 
 impl MonetaryPolicy {
     /// Approximate total APY (miner + holder).
-    pub fn total_apy(&self) -> f64 {
-        self.miner_inflation_apy + self.holder_interest_apy
-    }
+    pub fn total_apy(&self) => self.miner_inflation_apy + self.holder_interest_apy;
 }
 
 //////////////////////////////////////////
@@ -225,7 +219,7 @@ impl LabelUniverseKey {
     }
 }
 
-/// 9∞ master root, stored as a single scalar string; we don't interpret the 9 segments yet.
+/// 9∞ master root, stored as a single scalar string.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OmegaMasterRoot {
     /// Canonically: `;∞;∞;∞;∞;∞;∞;∞;∞;∞;`-folded scalar.
@@ -392,5 +386,86 @@ pub struct LandLock {
 impl LandLock {
     pub fn zillow_estimate(&self) -> u128 {
         self.zillow_estimate_dlog
+    }
+}
+
+//////////////////////////////////////////
+// Genesis roots & airdrop network rules
+//////////////////////////////////////////
+
+/// One of the 8 special genesis root wallets (7×VORTEX + 1×COMET).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenesisRootWallet {
+    pub kind: RootWalletKind,
+    pub address: Address,
+    /// Human readable name, e.g. "VORTEX-1", "COMET".
+    pub display_name: String,
+}
+
+/// Canon genesis config:
+/// - total genesis wallets = 88,248
+/// - 8 top roots (7 VORTEX, 1 COMET)
+/// - 88,240 airdrop wallets (gift1..gift88240)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenesisConfig {
+    pub total_genesis_wallets: u32,
+    pub top_roots: Vec<GenesisRootWallet>,
+    pub airdrop_wallets: u32,
+}
+
+impl GenesisConfig {
+    /// Canon configuration with synthetic addresses for the VORTEX roots
+    /// and Luke's real COMET phone+label.
+    pub fn canon() -> Self {
+        let mut roots = Vec::new();
+
+        // V1..V7: synthetic phone "vortex" + label "v1".."v7"
+        for i in 1u8..=7u8 {
+            roots.push(GenesisRootWallet {
+                kind: RootWalletKind::Vortex(i),
+                address: Address {
+                    phone: "vortex".to_string(),
+                    label: format!("v{}", i),
+                },
+                display_name: format!("VORTEX-{}", i),
+            });
+        }
+
+        // COMET: Luke's operational pool, tied to his phone and label "comet"
+        roots.push(GenesisRootWallet {
+            kind: RootWalletKind::Comet,
+            address: Address {
+                phone: "9132077554".to_string(),
+                label: "comet".to_string(),
+            },
+            display_name: "COMET".to_string(),
+        });
+
+        Self {
+            total_genesis_wallets: 88_248,
+            top_roots: roots,
+            airdrop_wallets: 88_240,
+        }
+    }
+}
+
+/// Network-level rules for how airdrops can be farmed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AirdropNetworkRules {
+    /// Max successful airdrops per public IP.
+    pub max_per_ip: u32,
+    /// Are VPN/datacenter IPs allowed?
+    pub allow_vpns: bool,
+    /// Free-form notes about additional rules (multi-SIM, multi-device).
+    pub notes: String,
+}
+
+impl Default for AirdropNetworkRules {
+    fn default() -> Self {
+        Self {
+            max_per_ip: 1,
+            allow_vpns: false,
+            notes: "One airdrop per public IP; VPN/data-center IPs blocked; multiple phones/Apple-Google accounts allowed but require separate networks.".to_string(),
+        }
     }
 }

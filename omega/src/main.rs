@@ -62,7 +62,6 @@ fn main() -> Result<()> {
     let mut last_tick = Instant::now();
 
     loop {
-        // Basic tick pacing: sleep to approximate the target phi tick rate.
         let now = Instant::now();
         if now < last_tick + tick_duration {
             let remaining = (last_tick + tick_duration).saturating_duration_since(now);
@@ -71,7 +70,6 @@ fn main() -> Result<()> {
         last_tick = Instant::now();
         ticks = ticks.wrapping_add(1);
 
-        // Every 8_888 ticks, print a soft heartbeat log.
         if ticks % 8_888 == 0 || last_log.elapsed() >= Duration::from_secs(8) {
             println!(
                 "[omega] ticks={} phi_tick_hz≈{:.3} gravity_phi_exponent={}",
