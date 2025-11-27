@@ -5,6 +5,7 @@
 // - Node config
 // - Planets + φ-gravity profiles
 // - Ω filesystem helpers (label universe path)
+// - Tick tuning model (how φ-ticks map to client frames)
 
 use serde::{Deserialize, Serialize};
 
@@ -115,6 +116,29 @@ pub struct PhiGravityProfile {
     pub g_fall: f64,
     /// Computed φ^phi_power_fly.
     pub g_fly: f64,
+}
+
+/// Tick tuning result for a client on a given planet.
+/// This is what the Minecraft plugin / game client will actually consume.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TickTuning {
+    /// Planet id, e.g. "earth".
+    pub planet_id: String,
+    /// Client frames per second (e.g. 60, 144, 1000).
+    pub client_fps: f64,
+    /// Server φ-tick rate from NodeConfig (conceptual physics heartbeat).
+    pub server_phi_tick_rate: f64,
+    /// How many φ-ticks we conceptually traverse per rendered frame.
+    pub ticks_per_frame: f64,
+    /// Planet φ exponents for fall/fly.
+    pub phi_power_fall: f64,
+    pub phi_power_fly: f64,
+    /// Raw φ^power values.
+    pub g_fall: f64,
+    pub g_fly: f64,
+    /// Effective delta per frame (what you plug into your velocity integrator).
+    pub effective_delta_fall_per_frame: f64,
+    pub effective_delta_fly_per_frame: f64,
 }
 
 /// LabelUniversePath encodes the Ω filesystem path for a (phone, label)

@@ -8,6 +8,7 @@
 // - POST /transfer              (body: TransferTx JSON)
 // - GET  /planets               (list φ-planet specs)
 // - GET  /phi_gravity?id=earth  (φ^?-per-tick gravity profile)
+// - GET  /ticks/tune?fps=&planet= (FPS-aware φ tick tuning)
 // - GET  /omega/master_root     (UniverseSnapshot, 9∞ root style)
 // - GET  /omega/label_path?phone=&label= (Ω LabelUniversePath)
 // - GET  /land/locks?world=     (list land locks, optional world filter)
@@ -26,12 +27,12 @@ use axum::{
     Json, Router,
 };
 use corelib::{
-    compute_phi_gravity, default_planets, label_universe_path, UniverseState,
+    compute_phi_gravity, compute_tick_tuning, default_planets, label_universe_path, UniverseState,
 };
 use serde::{Deserialize, Serialize};
 use spec::{
     Balance, BalanceView, LabelId, LabelUniversePath, LandLock, NodeConfig, PhiGravityProfile,
-    PlanetSpec, TransferTx, UniverseSnapshot,
+    PlanetSpec, TickTuning, TransferTx, UniverseSnapshot,
 };
 
 #[derive(Clone)]
@@ -68,6 +69,14 @@ struct LandMintRequest {
     pub zillow_estimate_amount: u128,
 }
 
+#[derive(Debug, Deserialize)]
+struct TickTuneQuery {
+    /// Client frames per second (e.g. 60, 144, 1000).
+    fps: f64,
+    /// Planet id, e.g. "earth", "moon".
+    planet: String,
+}
+
 #[derive(Debug, Serialize)]
 struct TransferResponse {
     ok: bool,
@@ -93,6 +102,13 @@ struct LandMintResponse {
 #[derive(Debug, Serialize)]
 struct LandListResponse {
     locks: Vec<LandLock>,
+}
+
+#[derive(Debug, Serialize)]
+struct TickTuneResponse {
+    ok: bool,
+    error: Option<String>,
+    tuning: Option<TickTuning>,
 }
 
 #[tokio::main]
@@ -140,6 +156,7 @@ async fn main() {
         .route("/transfer", post(transfer))
         .route("/planets", get(planets))
         .route("/phi_gravity", get(phi_gravity))
+        .route("/ticks/tune", get(ticks_tune))
         .route("/omega/master_root", get(omega_master_root))
         .route("/omega/label_path", get(omega_label_path))
         .route("/land/locks", get(land_locks))
@@ -245,6 +262,39 @@ async fn phi_gravity(Query(q): Query<PlanetQuery>) -> Json<PhiGravityResponse> {
             ok: false,
             error: Some(format!("unknown planet id '{}'", q.id)),
             profile: None,
+        }),
+    }
+}
+
+/// FPS-aware φ tick tuning:
+/// GET /ticks/tune?fps=&planet=
+/// - fps    = client frames per second (float)
+/// - planet = planet id (e.g. "earth")
+async fn ticks_tune(
+    State(state): State<AppState>,
+    Query(q): Query<TickTuneQuery>,
+) -> Json<TickTuneResponse> {
+    if q.fps <= 0.0 {
+        return Json(TickTuneResponse {
+            ok: false,
+            error: Some("fps must be > 0".to_string()),
+            tuning: None,
+        });
+    }
+
+    let phi_rate = state.config.phi_tick_rate;
+    let tuning = compute_tick_tuning(phi_rate, q.fps, &q.planet);
+
+    match tuning {
+        Some(t) => Json(TickTuneResponse {
+            ok: true,
+            error: None,
+            tuning: Some(t),
+        }),
+        None => Json(TickTuneResponse {
+            ok: false,
+            error: Some(format!("unknown planet id '{}'", q.planet)),
+            tuning: None,
         }),
     }
 }

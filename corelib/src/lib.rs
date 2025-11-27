@@ -1,6 +1,6 @@
 // corelib/src/lib.rs
 //
-// Universe state machine + φ-gravity + Ω filesystem helpers + landlocks.
+// Universe state machine + φ-gravity + Ω filesystem helpers + landlocks + tick tuning.
 //
 // - In-memory maps for label balances.
 // - Simple transfer logic.
@@ -9,13 +9,14 @@
 // - Planet list and φ^?-per-tick gravity profiles.
 // - LabelUniversePath constructor for Ω paths.
 // - Land lock registry in-memory.
+// - compute_tick_tuning to map server φ-ticks → client frames.
 
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use spec::{
     Balance, BlockHeight, LabelId, LabelUniversePath, LandLock, PhiGravityProfile, PlanetSpec,
-    SpecError, TransferTx, UniverseSnapshot,
+    SpecError, TickTuning, TransferTx, UniverseSnapshot,
 };
 
 /// PHI = golden ratio, used as the Ω scaling constant.
@@ -235,4 +236,43 @@ pub fn label_universe_path(phone: &str, label: &str) -> LabelUniversePath {
         label: label.to_string(),
         path,
     }
+}
+
+/// Compute how server φ-ticks map into client frames for a given planet.
+///
+/// - `phi_tick_rate` = conceptual server ticks per second from config.
+/// - `client_fps`    = frames per second on the client.
+/// - `planet_id`     = which planet's φ-exponents to use.
+///
+/// Returns a TickTuning that the game client can plug directly into its
+/// per-frame velocity integration.
+pub fn compute_tick_tuning(
+    phi_tick_rate: f64,
+    client_fps: f64,
+    planet_id: &str,
+) -> Option<TickTuning> {
+    if client_fps <= 0.0 {
+        return None;
+    }
+
+    let profile = compute_phi_gravity(planet_id)?;
+
+    // Conceptually, how many φ-ticks do we traverse per rendered frame?
+    let ticks_per_frame = phi_tick_rate / client_fps;
+
+    let effective_delta_fall_per_frame = profile.g_fall * ticks_per_frame;
+    let effective_delta_fly_per_frame = profile.g_fly * ticks_per_frame;
+
+    Some(TickTuning {
+        planet_id: profile.planet_id.clone(),
+        client_fps,
+        server_phi_tick_rate: phi_tick_rate,
+        ticks_per_frame,
+        phi_power_fall: profile.phi_power_fall,
+        phi_power_fly: profile.phi_power_fly,
+        g_fall: profile.g_fall,
+        g_fly: profile.g_fly,
+        effective_delta_fall_per_frame,
+        effective_delta_fly_per_frame,
+    })
 }

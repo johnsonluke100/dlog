@@ -11,4 +11,6 @@ bind_addr = "0.0.0.0:8080"
 # public_url = "https://example.com"
 
 # Conceptual phi tick rate (Ω ticks per second).
+# Think of this as "server physics heartbeat". Clients with different FPS
+# will ask /ticks/tune how to map this to their frames.
 phi_tick_rate = 1000.0
