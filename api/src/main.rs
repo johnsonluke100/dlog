@@ -5,7 +5,7 @@ use std::{
 };
 
 use axum::{
-    extract::State,
+    extract::{Path, State},
     routing::{get, post},
     Json, Router,
 };
@@ -16,6 +16,14 @@ use tracing::info;
 /// Golden ratio – core Ω constant.
 fn phi() -> f64 {
     1.618_033_988_749_894_8_f64
+}
+
+/// Canonical integer base for this universe.
+const CANONICAL_BASE: u8 = 8;
+
+/// Convert an integer to canonical base-8 string (no prefix).
+fn to_octal_u64(value: u64) -> String {
+    format!("{:o}", value)
 }
 
 /* ========= Core App State ========= */
@@ -40,6 +48,7 @@ struct UniverseInner {
     flight_rules: FlightRules,
     filesystem_rules: FilesystemRules,
     ethic_creed: EthicCreed,
+    solar_system: SolarSystemAligned,
 }
 
 impl UniverseInner {
@@ -58,6 +67,7 @@ impl UniverseInner {
             flight_rules: FlightRules::dlog_default(phi_val),
             filesystem_rules: FilesystemRules::dlog_default(),
             ethic_creed: EthicCreed::dlog_default(),
+            solar_system: SolarSystemAligned::dlog_eclipse_default(),
         }
     }
 
@@ -68,12 +78,15 @@ impl UniverseInner {
     fn snapshot(&self) -> UniverseSnapshot {
         UniverseSnapshot {
             block_height: self.block_height,
+            block_height_octal: to_octal_u64(self.block_height),
+            canonical_number_base: CANONICAL_BASE,
             phi_tick_hz: self.phi_tick_hz,
             monetary_policy: self.monetary_policy.clone(),
             gift_rules: self.gift_rules.clone(),
             airdrop_rules: self.airdrop_rules.clone(),
             device_rules: self.device_rules.clone(),
             ethic_creed: self.ethic_creed.clone(),
+            solar_system: self.solar_system.clone(),
         }
     }
 }
@@ -86,6 +99,12 @@ struct MonetaryPolicy {
     holder_interest_apy: f64,
     total_expansion_apy: f64,
     block_time_seconds_hint: f64,
+    /// Miner inflation in basis points, rendered as base-8.
+    miner_inflation_bps_octal: String,
+    /// Holder interest in basis points, rendered as base-8.
+    holder_interest_bps_octal: String,
+    /// Total expansion in basis points, rendered as base-8.
+    total_expansion_bps_octal: String,
     notes: Vec<String>,
 }
 
@@ -96,16 +115,25 @@ impl MonetaryPolicy {
         // Approx combined – not exact compounding math, but intuitive:
         let total = (1.0 + miner) * (1.0 + holder) - 1.0;
 
+        let miner_bps = (miner * 10_000.0).round() as u64;
+        let holder_bps = (holder * 10_000.0).round() as u64;
+        let total_bps = (total * 10_000.0).round() as u64;
+
         Self {
             miner_inflation_apy: miner,
             holder_interest_apy: holder,
             total_expansion_apy: total,
             block_time_seconds_hint: 8.0,
+            miner_inflation_bps_octal: to_octal_u64(miner_bps),
+            holder_interest_bps_octal: to_octal_u64(holder_bps),
+            total_expansion_bps_octal: to_octal_u64(total_bps),
             notes: vec![
                 "Miner inflation ~8.8248% APY – global firehose.".into(),
                 "Holder interest 61.8% APY – personal growth tree.".into(),
                 "Total supply expansion ~70%+ / year – printing is intentional.".into(),
-                "Block time is Ω-attention based; 8s is a UI hint only.".into(),
+                "Block time is Ω-attention based; 8s is an NPC-layer UI hint only.".into(),
+                "All rate fields above are NPC decimals; octal basis points are canonical."
+                    .into(),
             ],
         }
     }
@@ -377,17 +405,93 @@ impl EthicCreed {
     }
 }
 
+/* ========= Solar System – Eclipse Rail ========= */
+
+#[derive(Debug, Clone, Serialize)]
+struct SolarBodyAligned {
+    name: String,
+    kind: String,
+    /// NPC-layer radius in kilometers (hint only).
+    radius_km_npc: u64,
+    /// Canonical radius encoding in base-8.
+    radius_km_octal: String,
+    /// NPC-layer distance from the star in kilometers (hint only).
+    distance_from_star_km_npc: u64,
+    /// Canonical distance encoding in base-8.
+    distance_from_star_km_octal: String,
+    /// Normalized coordinate along the eclipse rail in [-1.0, 1.0].
+    normalized_x: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct SolarSystemAligned {
+    star_name: String,
+    star_kind: String,
+    bodies: Vec<SolarBodyAligned>,
+    notes: Vec<String>,
+}
+
+impl SolarSystemAligned {
+    /// Solar system frozen into an Ω-eclipse rail for you to explore.
+    fn dlog_eclipse_default() -> Self {
+        // NPC hints: radii and distances in km.
+        // Values are approximate, from mainstream astronomy.
+        let bodies_data: Vec<(&str, &str, u64, u64, f64)> = vec![
+            // name, kind, radius_km, distance_from_sun_km, normalized_x
+            ("Sun", "star", 695_700, 0, 0.0),
+            ("Mercury", "planet", 2_440, 57_900_000, 0.10),
+            ("Venus", "planet", 6_052, 108_200_000, 0.25),
+            ("Earth", "planet", 6_371, 149_600_000, 0.50),
+            // Moon anchored slightly “past” Earth on the same rail.
+            ("Moon", "moon", 1_737, 149_600_000 + 384_400, 0.52),
+            ("Mars", "planet", 3_390, 227_900_000, 0.80),
+        ];
+
+        let bodies: Vec<SolarBodyAligned> = bodies_data
+            .into_iter()
+            .map(|(name, kind, radius, dist, nx)| SolarBodyAligned {
+                name: name.into(),
+                kind: kind.into(),
+                radius_km_npc: radius,
+                radius_km_octal: to_octal_u64(radius),
+                distance_from_star_km_npc: dist,
+                distance_from_star_km_octal: to_octal_u64(dist),
+                normalized_x: nx,
+            })
+            .collect();
+
+        Self {
+            star_name: "Sun".into(),
+            star_kind: "star".into(),
+            bodies,
+            notes: vec![
+                "All major bodies are pinned on a single Ω rail – the eclipse line."
+                    .into(),
+                "Distances and radii are stored with NPC-friendly kilometers plus octal strings."
+                    .into(),
+                "Game clients can treat normalized_x as the coordinate along the aligned rail."
+                    .into(),
+                "From your POV: the whole solar system aligns just so you can explore it."
+                    .into(),
+            ],
+        }
+    }
+}
+
 /* ========= Snapshots & DTOs ========= */
 
 #[derive(Debug, Clone, Serialize)]
 struct UniverseSnapshot {
     block_height: u64,
+    block_height_octal: String,
+    canonical_number_base: u8,
     phi_tick_hz: f64,
     monetary_policy: MonetaryPolicy,
     gift_rules: GiftRules,
     airdrop_rules: AirdropNetworkRules,
     device_rules: DeviceOutflowRules,
     ethic_creed: EthicCreed,
+    solar_system: SolarSystemAligned,
 }
 
 #[derive(Debug, Serialize)]
@@ -416,14 +520,23 @@ struct HostingRuntimeConfig {
     notes: Vec<String>,
 }
 
+/* ========= Encoding Helpers ========= */
+
+#[derive(Debug, Serialize)]
+struct OctalEncoding {
+    value_decimal: u64,
+    value_octal: String,
+    base: u8,
+}
+
 /* ========= Handlers ========= */
 
 async fn root() -> Json<RootResponse> {
     let mode = env::var("DLOG_RUNTIME_MODE").unwrap_or_else(|_| "testing_local".into());
     Json(RootResponse {
         service: "dlog-api".into(),
-        version: "0.1.0".into(),
-        message: "Ω heartbeat online; star slid onto a new rail.".into(),
+        version: "0.2.0".into(),
+        message: "Ω heartbeat online; solar rail aligned; base-8 canon engaged.".into(),
         mode_hint: mode,
     })
 }
@@ -459,6 +572,8 @@ async fn tick_once(State(state): State<AppState>) -> Json<UniverseSnapshot> {
         .expect("universe rwlock poisoned on read");
     Json(uni.snapshot())
 }
+
+/* ---- Money, Gifts, Devices ---- */
 
 async fn get_money_policy(State(state): State<AppState>) -> Json<MonetaryPolicy> {
     let uni = state
@@ -512,6 +627,8 @@ async fn get_device_rules(State(state): State<AppState>) -> Json<DeviceOutflowRu
         .expect("universe rwlock poisoned on read");
     Json(uni.device_rules.clone())
 }
+
+/* ---- Land ---- */
 
 #[derive(Debug, Serialize)]
 struct LandExampleLock {
@@ -576,6 +693,8 @@ async fn example_land_adjacency() -> Json<LandAdjacencyExample> {
     })
 }
 
+/* ---- Flight ---- */
+
 #[derive(Debug, Serialize)]
 struct FlightLawSummary {
     phi_per_tick: f64,
@@ -601,6 +720,8 @@ async fn get_planet_table(State(state): State<AppState>) -> Json<Vec<PlanetGravi
     Json(uni.flight_rules.planets.clone())
 }
 
+/* ---- Filesystem ---- */
+
 async fn get_filesystem_example(
     State(state): State<AppState>,
 ) -> Json<FilesystemRules> {
@@ -610,6 +731,8 @@ async fn get_filesystem_example(
         .expect("universe rwlock poisoned on read");
     Json(uni.filesystem_rules.clone())
 }
+
+/* ---- Hosting / Runtime ---- */
 
 async fn get_hosting_runtime() -> Json<HostingRuntimeConfig> {
     let mode = env::var("DLOG_RUNTIME_MODE").unwrap_or_else(|_| "testing_local".into());
@@ -637,9 +760,12 @@ async fn get_hosting_runtime() -> Json<HostingRuntimeConfig> {
                 .into(),
             "For now, everything is self-contained: Rust, Axum, CORS, Ω state – all on your Mac."
                 .into(),
+            "Canonical numeric base is 8; NPC decimal is just an overlay.".into(),
         ],
     })
 }
+
+/* ---- Ethic Creed ---- */
 
 async fn get_ethic_creed(State(state): State<AppState>) -> Json<EthicCreed> {
     let uni = state
@@ -647,6 +773,38 @@ async fn get_ethic_creed(State(state): State<AppState>) -> Json<EthicCreed> {
         .read()
         .expect("universe rwlock poisoned on read");
     Json(uni.ethic_creed.clone())
+}
+
+/* ---- Solar System – Eclipse Rail ---- */
+
+async fn get_solar_eclipse(
+    State(state): State<AppState>,
+) -> Json<SolarSystemAligned> {
+    let uni = state
+        .universe
+        .read()
+        .expect("universe rwlock poisoned on read");
+    Json(uni.solar_system.clone())
+}
+
+async fn get_solar_bodies(
+    State(state): State<AppState>,
+) -> Json<Vec<SolarBodyAligned>> {
+    let uni = state
+        .universe
+        .read()
+        .expect("universe rwlock poisoned on read");
+    Json(uni.solar_system.bodies.clone())
+}
+
+/* ---- Base-8 Encoding Helper ---- */
+
+async fn encode_octal(Path(value): Path<u64>) -> Json<OctalEncoding> {
+    Json(OctalEncoding {
+        value_decimal: value,
+        value_octal: to_octal_u64(value),
+        base: CANONICAL_BASE,
+    })
 }
 
 /* ========= Bootstrap ========= */
@@ -690,6 +848,9 @@ async fn main() {
         .route("/filesystem/example_label", get(get_filesystem_example))
         .route("/hosting/runtime", get(get_hosting_runtime))
         .route("/ethic/creed", get(get_ethic_creed))
+        .route("/solar/eclipse", get(get_solar_eclipse))
+        .route("/solar/bodies", get(get_solar_bodies))
+        .route("/encoding/octal/u64/:value", get(encode_octal))
         .with_state(state)
         // Very loose CORS for local dev; lock this down later.
         .layer(CorsLayer::very_permissive());
