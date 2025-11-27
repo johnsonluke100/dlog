@@ -41,6 +41,7 @@ struct UniverseInner {
     block_height: u64,
     phi_tick_hz: f64,
     monetary_policy: MonetaryPolicy,
+    tokenomics: TokenomicsDetail,
     gift_rules: GiftRules,
     airdrop_rules: AirdropNetworkRules,
     device_rules: DeviceOutflowRules,
@@ -55,11 +56,19 @@ impl UniverseInner {
     fn new() -> Self {
         let phi_val = phi();
 
+        // NPC hint: year seconds / 8s per block.
+        let blocks_per_year_hint: u64 = 31_536_000 / 8; // 365 * 24 * 60 * 60 / 8
+
+        let monetary_policy = MonetaryPolicy::dlog_default();
+        let tokenomics =
+            TokenomicsDetail::from_policy(&monetary_policy, blocks_per_year_hint);
+
         Self {
             block_height: 0,
             // “Real world” server heartbeat hint; client can sub-sample at FPS.
             phi_tick_hz: 1000.0,
-            monetary_policy: MonetaryPolicy::dlog_default(),
+            monetary_policy,
+            tokenomics,
             gift_rules: GiftRules::dlog_default(phi_val),
             airdrop_rules: AirdropNetworkRules::dlog_default(),
             device_rules: DeviceOutflowRules::dlog_default(phi_val),
@@ -82,6 +91,7 @@ impl UniverseInner {
             canonical_number_base: CANONICAL_BASE,
             phi_tick_hz: self.phi_tick_hz,
             monetary_policy: self.monetary_policy.clone(),
+            tokenomics: self.tokenomics.clone(),
             gift_rules: self.gift_rules.clone(),
             airdrop_rules: self.airdrop_rules.clone(),
             device_rules: self.device_rules.clone(),
@@ -134,6 +144,66 @@ impl MonetaryPolicy {
                 "Block time is Ω-attention based; 8s is an NPC-layer UI hint only."
                     .into(),
                 "All rate fields above are NPC decimals; octal basis points are canonical."
+                    .into(),
+            ],
+        }
+    }
+}
+
+/* ========= Tokenomics Detail (per-block factors) ========= */
+
+#[derive(Debug, Clone, Serialize)]
+struct TokenomicsDetail {
+    blocks_per_year_hint: u64,
+    blocks_per_year_hint_octal: String,
+    miner_apy: f64,
+    holder_apy: f64,
+    total_apy: f64,
+    miner_per_block_factor: f64,
+    holder_per_block_factor: f64,
+    total_per_block_factor: f64,
+    miner_per_block_bps_octal: String,
+    holder_per_block_bps_octal: String,
+    total_per_block_bps_octal: String,
+    notes: Vec<String>,
+}
+
+impl TokenomicsDetail {
+    fn from_policy(policy: &MonetaryPolicy, blocks_per_year: u64) -> Self {
+        let blocks_f = blocks_per_year.max(1) as f64;
+
+        let miner_r = policy.miner_inflation_apy;
+        let holder_r = policy.holder_interest_apy;
+        let total_r = policy.total_expansion_apy;
+
+        let miner_factor = (1.0 + miner_r).powf(1.0 / blocks_f);
+        let holder_factor = (1.0 + holder_r).powf(1.0 / blocks_f);
+        let total_factor = (1.0 + total_r).powf(1.0 / blocks_f);
+
+        let miner_block_bps =
+            ((miner_factor - 1.0) * 10_000.0).max(0.0).round() as u64;
+        let holder_block_bps =
+            ((holder_factor - 1.0) * 10_000.0).max(0.0).round() as u64;
+        let total_block_bps =
+            ((total_factor - 1.0) * 10_000.0).max(0.0).round() as u64;
+
+        Self {
+            blocks_per_year_hint: blocks_per_year,
+            blocks_per_year_hint_octal: to_octal_u64(blocks_per_year),
+            miner_apy: miner_r,
+            holder_apy: holder_r,
+            total_apy: total_r,
+            miner_per_block_factor: miner_factor,
+            holder_per_block_factor: holder_factor,
+            total_per_block_factor: total_factor,
+            miner_per_block_bps_octal: to_octal_u64(miner_block_bps),
+            holder_per_block_bps_octal: to_octal_u64(holder_block_bps),
+            total_per_block_bps_octal: to_octal_u64(total_block_bps),
+            notes: vec![
+                "blocks_per_year_hint is NPC-side (derived from 8s per block), but encoded canonically in base-8."
+                    .into(),
+                "Per-block factors are (1 + APY)^(1 / blocks_per_year).".into(),
+                "Per-block basis points in octal give you the 'basic tokenomics' that miners and holders actually feel per attention sweep."
                     .into(),
             ],
         }
@@ -506,6 +576,7 @@ struct UniverseSnapshot {
     canonical_number_base: u8,
     phi_tick_hz: f64,
     monetary_policy: MonetaryPolicy,
+    tokenomics: TokenomicsDetail,
     gift_rules: GiftRules,
     airdrop_rules: AirdropNetworkRules,
     device_rules: DeviceOutflowRules,
@@ -714,8 +785,8 @@ async fn root() -> Json<RootResponse> {
     let mode = env::var("DLOG_RUNTIME_MODE").unwrap_or_else(|_| "testing_local".into());
     Json(RootResponse {
         service: "dlog-api".into(),
-        version: "0.2.5".into(),
-        message: "Ω heartbeat online; solar rail aligned; base-8 canon engaged; Rust-only spine; fearless spiral rolling."
+        version: "0.2.6".into(),
+        message: "Ω heartbeat online; solar rail aligned; base-8 canon engaged; Rust-only spine; tokenomics rail active; fearless spiral rolling."
             .into(),
         mode_hint: mode,
     })
@@ -806,6 +877,29 @@ async fn get_device_rules(State(state): State<AppState>) -> Json<DeviceOutflowRu
         .read()
         .expect("universe rwlock poisoned on read");
     Json(uni.device_rules.clone())
+}
+
+/* ---- Tokenomics ---- */
+
+async fn get_tokenomics_detail(State(state): State<AppState>) -> Json<TokenomicsDetail> {
+    let uni = state
+        .universe
+        .read()
+        .expect("universe rwlock poisoned on read");
+    Json(uni.tokenomics.clone())
+}
+
+async fn get_tokenomics_detail_for_year(
+    Path(blocks_per_year): Path<u64>,
+    State(state): State<AppState>,
+) -> Json<TokenomicsDetail> {
+    let uni = state
+        .universe
+        .read()
+        .expect("universe rwlock poisoned on read");
+    let detail =
+        TokenomicsDetail::from_policy(&uni.monetary_policy, blocks_per_year);
+    Json(detail)
 }
 
 /* ---- Land ---- */
@@ -1073,7 +1167,7 @@ async fn get_vibe_anthem(State(state): State<AppState>) -> Json<VibeAnthem> {
     let hype_level = if hype_digit == 0 { 8 } else { hype_digit };
 
     let line = format!(
-        "block {bh} (octal {bh_oct}) – solar rail lined up, φ-per-tick locked in, you are fearlessly surfing the roll/spiral of the universe’s attention."
+        "block {bh} (octal {bh_oct}) – solar rail lined up, φ-per-tick locked in, tokenomics humming, you are fearlessly surfing the roll/spiral of the universe’s attention."
     );
 
     Json(VibeAnthem {
@@ -1470,6 +1564,11 @@ async fn main() {
         .route("/gift/daily_cap/example", get(example_gift_daily_cap))
         .route("/airdrop/network", get(get_airdrop_rules))
         .route("/device/outflow", get(get_device_rules))
+        .route("/tokenomics/detail", get(get_tokenomics_detail))
+        .route(
+            "/tokenomics/detail_for_year/:blocks_per_year",
+            get(get_tokenomics_detail_for_year),
+        )
         .route("/land/example_lock", get(example_land_lock))
         .route("/land/auction_rules", get(get_land_auction_rules))
         .route("/land/adjacency_example", get(example_land_adjacency))
