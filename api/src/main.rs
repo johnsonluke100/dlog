@@ -214,6 +214,46 @@ struct FlightTuningResponse {
     suggested_ticks_per_frame: f64,
 }
 
+/// Platform kinds for clients that can attach to the DLOG universe.
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+enum ClientPlatform {
+    JavaPc,
+    BedrockMobile,
+    Xbox,
+    Playstation,
+    Web,
+}
+
+/// Implementation status for each platform.
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+enum ClientStatus {
+    NotReady,
+    Prototype,
+    Alpha,
+    Live,
+}
+
+/// One row in the clients manifest.
+#[derive(Serialize)]
+struct ClientCapability {
+    platform: ClientPlatform,
+    status: ClientStatus,
+    supports_dlog_tips: bool,
+    supports_land_locks: bool,
+    supports_crossplay: bool,
+    notes: String,
+}
+
+/// Response for GET /clients
+#[derive(Serialize)]
+struct ClientsResponse {
+    phi: f64,
+    heartbeat_hz: f64,
+    entries: Vec<ClientCapability>,
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -281,6 +321,7 @@ async fn main() {
         .route("/flight/planet_gravity_table", get(planet_gravity_table))
         .route("/flight/tuning", get(flight_tuning))
         .route("/omega/flames", get(omega_flames))
+        .route("/clients", get(clients_manifest))
         .with_state(state);
 
     tracing::info!(
@@ -632,5 +673,65 @@ async fn omega_flames(State(state): State<AppState>) -> Json<OmegaFlamesResponse
         phi: PHI,
         tick_hz,
         channels,
+    })
+}
+
+/// Clients manifest: describes Java/Bedrock/Xbox/Playstation/Web support.
+///
+/// Right now: everything is "not_ready" (truthful),
+/// but the node itself knows what species of clients it intends to serve.
+async fn clients_manifest(State(state): State<AppState>) -> Json<ClientsResponse> {
+    let universe = state.universe.lock().expect("universe lock poisoned");
+    let tick_hz = universe.config.phi_tick_hz;
+    drop(universe);
+
+    let entries = vec![
+        ClientCapability {
+            platform: ClientPlatform::JavaPc,
+            status: ClientStatus::NotReady,
+            supports_dlog_tips: false,
+            supports_land_locks: false,
+            supports_crossplay: false,
+            notes: "Minecraft Java plugin planned (Paper/Spigot bridge into DLOG node).".to_string(),
+        },
+        ClientCapability {
+            platform: ClientPlatform::BedrockMobile,
+            status: ClientStatus::NotReady,
+            supports_dlog_tips: false,
+            supports_land_locks: false,
+            supports_crossplay: false,
+            notes: "Bedrock/mobile via existing proxy stack + DLOG QR flows (future).".to_string(),
+        },
+        ClientCapability {
+            platform: ClientPlatform::Xbox,
+            status: ClientStatus::NotReady,
+            supports_dlog_tips: false,
+            supports_land_locks: false,
+            supports_crossplay: false,
+            notes: "Console entry via Bedrock path + phone biometrics (future).".to_string(),
+        },
+        ClientCapability {
+            platform: ClientPlatform::Playstation,
+            status: ClientStatus::NotReady,
+            supports_dlog_tips: false,
+            supports_land_locks: false,
+            supports_crossplay: false,
+            notes: "Same pattern as Xbox: Bedrock-style client + QR/web pairing (future).".to_string(),
+        },
+        ClientCapability {
+            platform: ClientPlatform::Web,
+            status: ClientStatus::NotReady,
+            supports_dlog_tips: false,
+            supports_land_locks: false,
+            supports_crossplay: false,
+            notes: "Browser/WebGL client that talks directly to dlog-api over HTTPS (future)."
+                .to_string(),
+        },
+    ];
+
+    Json(ClientsResponse {
+        phi: PHI,
+        heartbeat_hz: tick_hz,
+        entries,
     })
 }
