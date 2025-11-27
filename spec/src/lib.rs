@@ -129,7 +129,7 @@ pub mod cosmos {
     }
 
     impl std::fmt::Display for PlanetId {
-        fn fmt(fn fmt(fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {self, f: fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {mut std::fmt::Formatter<'_>) -> std::fmt::Result {self, f: fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn fmt(fn fmt(fn fmt(fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {self, f: fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {mut std::fmt::Formatter<'_>) -> std::fmt::Result {self, f: fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {mut std::fmt::Formatter<'_>) -> std::fmt::Result {self, f: fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let s = match self {
                 PlanetId::Earth => "earth",
                 PlanetId::Moon => "moon",
