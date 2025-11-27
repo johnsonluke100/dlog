@@ -112,9 +112,6 @@ pub struct UniverseSnapshot {
 //////////////////////////////////////////
 
 /// One slide in a sky slideshow, referencing an image path and duration.
-///
-/// Think of this as the "ProcessedImage" / "SlideshowFrame" pairing
-/// from your SkyLighting Java world, but stripped to metadata only.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkySlideRef {
     pub id: u32,
@@ -439,6 +436,23 @@ impl Default for LandAuctionRules {
     }
 }
 
+/// Grid coordinate for land-lock adjacency checks.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LandGridCoord {
+    pub x: i32,
+    pub z: i32,
+}
+
+impl LandGridCoord {
+    /// Two coords are adjacent if they touch by edge or corner (8-neighborhood).
+    /// This is the primitive used to enforce "locks must touch" / T-shape layouts.
+    pub fn is_adjacent_to(&self, other: &LandGridCoord) -> bool {
+        let dx = (self.x - other.x).abs();
+        let dz = (self.z - other.z).abs();
+        (dx == 1 && dz == 0) || (dx == 0 && dz == 1) || (dx == 1 && dz == 1)
+    }
+}
+
 //////////////////////////////////////////
 // Label metadata (creation / deletion)
 //////////////////////////////////////////
@@ -531,6 +545,128 @@ impl Default for AirdropNetworkRules {
             max_per_ip: 1,
             allow_vpns: false,
             notes: "One airdrop per public IP; VPN/datacenter IPs blocked; multiple phones/Apple-Google accounts allowed but require separate networks.".to_string(),
+        }
+    }
+}
+
+//////////////////////////////////////////
+// Solar system + flight law (Ω-physics)
+//////////////////////////////////////////
+
+/// Planet configuration: φ-gravity, radius, and associated dimensions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanetConfig {
+    pub id: PlanetId,
+    pub name: String,
+    /// Gravity exponent for this planet (phi^k per tick).
+    pub phi_gravity_exponent: f64,
+    /// Approx radius in kilometers (Ω-side, for flavor and to-scale math).
+    pub radius_km: f64,
+    /// Dimension key for the shell world (e.g. "earth_shell").
+    pub shell_dimension: String,
+    /// Optional dimension key for the core world (e.g. "earth_core").
+    pub core_dimension: Option<String>,
+}
+
+/// Entire Ω-solar-system snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SolarSystemConfig {
+    pub planets: Vec<PlanetConfig>,
+}
+
+impl SolarSystemConfig {
+    /// Canonic snapshot: Sun, Earth, Moon, Mars, with hollow bodies.
+    pub fn canon() -> Self {
+        let planets = vec![
+            PlanetConfig {
+                id: PlanetId::SunShell,
+                name: "Sun".to_string(),
+                phi_gravity_exponent: 5.0,
+                radius_km: 696_340.0,
+                shell_dimension: "sun_shell".to_string(),
+                core_dimension: Some("sun_core".to_string()),
+            },
+            PlanetConfig {
+                id: PlanetId::EarthShell,
+                name: "Earth (shell)".to_string(),
+                phi_gravity_exponent: 4.0,
+                radius_km: 6_371.0,
+                shell_dimension: "earth_shell".to_string(),
+                core_dimension: Some("earth_core".to_string()),
+            },
+            PlanetConfig {
+                id: PlanetId::EarthCore,
+                name: "Earth (core)".to_string(),
+                phi_gravity_exponent: 3.2,
+                radius_km: 6_000.0,
+                shell_dimension: "earth_core".to_string(),
+                core_dimension: None,
+            },
+            PlanetConfig {
+                id: PlanetId::MoonShell,
+                name: "Moon (shell)".to_string(),
+                phi_gravity_exponent: 2.4,
+                radius_km: 1_737.4,
+                shell_dimension: "moon_shell".to_string(),
+                core_dimension: Some("moon_core".to_string()),
+            },
+            PlanetConfig {
+                id: PlanetId::MoonCore,
+                name: "Moon (core)".to_string(),
+                phi_gravity_exponent: 1.8,
+                radius_km: 1_600.0,
+                shell_dimension: "moon_core".to_string(),
+                core_dimension: None,
+            },
+            PlanetConfig {
+                id: PlanetId::MarsShell,
+                name: "Mars (shell)".to_string(),
+                phi_gravity_exponent: 3.0,
+                radius_km: 3_389.5,
+                shell_dimension: "mars_shell".to_string(),
+                core_dimension: Some("mars_core".to_string()),
+            },
+            PlanetConfig {
+                id: PlanetId::MarsCore,
+                name: "Mars (core)".to_string(),
+                phi_gravity_exponent: 2.6,
+                radius_km: 3_200.0,
+                shell_dimension: "mars_core".to_string(),
+                core_dimension: None,
+            },
+        ];
+        Self { planets }
+    }
+}
+
+/// Ω-flight law config: φ-accel/decel per tick, scaled per-planet.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlightLawConfig {
+    /// How many "phi units" of speed are added per attention tick while input is pressed.
+    pub accel_phi: f64,
+    /// How many "phi units" of speed are removed per tick while input is neutral / opposite.
+    pub decel_phi: f64,
+    /// Per-planet scale factor relative to base, e.g. Earth=1.0, Moon<1, Sun>1.
+    pub per_planet_scale: HashMap<PlanetId, f64>,
+}
+
+impl FlightLawConfig {
+    /// Canon version: base φ per tick, with lighter gravity on Moon/Mars cores.
+    pub fn canon() -> Self {
+        let mut per_planet_scale = HashMap::new();
+        per_planet_scale.insert(PlanetId::EarthShell, 1.0);
+        per_planet_scale.insert(PlanetId::EarthCore, 1.1);
+        per_planet_scale.insert(PlanetId::MoonShell, 0.6);
+        per_planet_scale.insert(PlanetId::MoonCore, 0.4);
+        per_planet_scale.insert(PlanetId::MarsShell, 0.8);
+        per_planet_scale.insert(PlanetId::MarsCore, 0.7);
+        per_planet_scale.insert(PlanetId::SunShell, 1.6);
+        per_planet_scale.insert(PlanetId::SunCore, 2.0);
+
+        Self {
+            accel_phi: PHI,       // push → +φ per tick
+            decel_phi: PHI,       // release → -φ per tick (toward stillness)
+            per_planet_scale,
         }
     }
 }

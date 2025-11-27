@@ -7,8 +7,9 @@ use dlog_core::init_universe;
 use dlog_corelib::{UniverseError, UniverseState};
 use dlog_spec::{
     AccessGrant, AccessRole, Address, Amount, AirdropNetworkRules, BlockHeight, DeviceLimitsRules,
-    GenesisConfig, GiftRules, LabelUniverseHash, LabelUniverseKey, LandAuctionRules, LandLock,
-    LandTier, MonetaryPolicy, OmegaFilesystemSnapshot, OmegaMasterRoot, PlanetId,
+    FlightLawConfig, GenesisConfig, GiftRules, LabelUniverseHash, LabelUniverseKey, LandAuctionRules,
+    LandGridCoord, LandLock, LandTier, MonetaryPolicy, OmegaFilesystemSnapshot, OmegaMasterRoot,
+    PlanetId, SolarSystemConfig,
 };
 use dlog_sky::SkyTimeline;
 use serde::{Deserialize, Serialize};
@@ -120,6 +121,25 @@ struct LandAuctionRulesResponse {
     rules: LandAuctionRules,
 }
 
+#[derive(Serialize)]
+struct SolarSystemResponse {
+    system: SolarSystemConfig,
+}
+
+#[derive(Serialize)]
+struct FlightLawResponse {
+    law: FlightLawConfig,
+}
+
+#[derive(Serialize)]
+struct LandAdjacencyExampleResponse {
+    a: LandGridCoord,
+    b: LandGridCoord,
+    c: LandGridCoord,
+    ab_adjacent: bool,
+    ac_adjacent: bool,
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -150,8 +170,11 @@ async fn main() {
         .route("/device/daily_cap", get(device_daily_cap))
         .route("/land/example_lock", get(land_example_lock))
         .route("/land/auction/rules", get(land_auction_rules))
+        .route("/land/adjacent_example", get(land_adjacency_example))
         .route("/genesis/roots", get(genesis_roots))
         .route("/omega/root", get(omega_root))
+        .route("/solar/system", get(solar_system))
+        .route("/flight/law", get(flight_law))
         .with_state(state);
 
     tracing::info!("dlog-api listening on http://{addr} (phi_tick_hz={tick_hz})");
@@ -298,6 +321,22 @@ async fn land_auction_rules() -> Json<LandAuctionRulesResponse> {
     Json(LandAuctionRulesResponse { rules })
 }
 
+async fn land_adjacency_example() -> Json<LandAdjacencyExampleResponse> {
+    let a = LandGridCoord { x: 0, z: 0 };
+    let b = LandGridCoord { x: 1, z: 0 }; // shares edge with a
+    let c = LandGridCoord { x: 2, z: 2 }; // not adjacent to a
+    let ab_adjacent = a.is_adjacent_to(&b);
+    let ac_adjacent = a.is_adjacent_to(&c);
+
+    Json(LandAdjacencyExampleResponse {
+        a,
+        b,
+        c,
+        ab_adjacent,
+        ac_adjacent,
+    })
+}
+
 async fn genesis_roots() -> Json<GenesisRootsResponse> {
     let genesis = GenesisConfig::canon();
     let network = AirdropNetworkRules::default();
@@ -341,4 +380,14 @@ async fn omega_root(State(state): State<AppState>) -> Json<OmegaRootResponse> {
     };
 
     Json(OmegaRootResponse { height, snapshot })
+}
+
+async fn solar_system() -> Json<SolarSystemResponse> {
+    let system = SolarSystemConfig::canon();
+    Json(SolarSystemResponse { system })
+}
+
+async fn flight_law() -> Json<FlightLawResponse> {
+    let law = FlightLawConfig::canon();
+    Json(FlightLawResponse { law })
 }
