@@ -325,6 +325,26 @@ struct WorldWarpResponse {
     reason: String,
 }
 
+/// Query for /filesystem/label
+#[derive(Deserialize)]
+struct FilesystemLabelQuery {
+    phone: String,
+    label: String,
+}
+
+/// Response for /filesystem/label
+#[derive(Serialize)]
+struct FilesystemLabelResponse {
+    phi: f64,
+    height: u64,
+    phone: String,
+    label: String,
+    master_root_scalar: String,
+    universe_file_path: String,
+    omega_segments: [String; 8],
+    hash: String,
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -396,6 +416,7 @@ async fn main() {
         .route("/universe/snapshot", get(universe_snapshot))
         .route("/wallet/overview", get(wallet_overview))
         .route("/world/warp", get(world_warp))
+        .route("/filesystem/label", get(filesystem_label))
         .with_state(state);
 
     tracing::info!(
@@ -1054,5 +1075,50 @@ async fn world_warp(Query(q): Query<WorldWarpQuery>) -> Json<WorldWarpResponse> 
         warped_coords,
         did_invert,
         reason,
+    })
+}
+
+/// Ω Filesystem lens for a single (phone, label) universe file.
+///
+/// This is the bridge to:
+///   - 9∞ master root scalar
+///   - Per-label universe file under /∞
+async fn filesystem_label(
+    State(state): State<AppState>,
+    Query(q): Query<FilesystemLabelQuery>,
+) -> Json<FilesystemLabelResponse> {
+    // Use current height to make segments feel "alive".
+    let universe = state.universe.lock().expect("universe lock poisoned");
+    let height = universe.height;
+    drop(universe);
+
+    let phone = q.phone;
+    let label = q.label;
+
+    let master_root_scalar = ";∞;∞;∞;∞;∞;∞;∞;∞;∞;".to_string();
+
+    let universe_file_path = format!(
+        "https://dloG.com/∞/;{};{};∞;∞;∞;∞;∞;∞;∞;∞;hash;",
+        phone, label
+    );
+
+    // Build 8 synthetic Omega segments from (phone, label, height).
+    let mut omega_segments: [String; 8] = Default::default();
+    for i in 0..8 {
+        let seg = format!("O{}:{}:{}:h{}", i + 1, phone, label, height);
+        omega_segments[i] = seg;
+    }
+
+    let hash = format!("omega_hash_{}_{}_h{}", phone, label, height);
+
+    Json(FilesystemLabelResponse {
+        phi: PHI,
+        height,
+        phone,
+        label,
+        master_root_scalar,
+        universe_file_path,
+        omega_segments,
+        hash,
     })
 }
