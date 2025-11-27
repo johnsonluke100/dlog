@@ -39,7 +39,7 @@ struct HeightResponse {
     height: u64,
 }
 
-#[derive(Serialize)]
+#[derive(serialize)]
 struct TickOnceResponse {
     height: u64,
 }
@@ -269,6 +269,37 @@ struct UniverseSnapshotResponse {
     sky: SkyCurrentResponse,
 }
 
+/// Query for /wallet/overview
+#[derive(Deserialize)]
+struct WalletOverviewQuery {
+    /// Phone number identity (e.g. "9132077554").
+    phone: String,
+    /// Optional days since this phone claimed its giftN.
+    days_since_claim: Option<u32>,
+    /// Optional days since this device enrolled.
+    days_since_enroll: Option<u32>,
+}
+
+/// Label summary for /wallet/overview
+#[derive(Serialize)]
+struct LabelOverview {
+    label: String,
+    receive_url: String,
+    filesystem_path: String,
+}
+
+/// Response for /wallet/overview
+#[derive(Serialize)]
+struct WalletOverviewResponse {
+    phi: f64,
+    height: u64,
+    phone: String,
+    labels: Vec<LabelOverview>,
+    gift_daily_cap_dlog: u64,
+    device_daily_cap_dlog: u64,
+    effective_send_cap_dlog: u64,
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -338,6 +369,7 @@ async fn main() {
         .route("/omega/flames", get(omega_flames))
         .route("/clients", get(clients_manifest))
         .route("/universe/snapshot", get(universe_snapshot))
+        .route("/wallet/overview", get(wallet_overview))
         .with_state(state);
 
     tracing::info!(
@@ -851,5 +883,69 @@ async fn universe_snapshot(State(state): State<AppState>) -> Json<UniverseSnapsh
         omega_root,
         example_lock,
         sky,
+    })
+}
+
+/// Wallet overview: labels + deep links + effective send caps for a phone.
+///
+/// This is the "who am I, what labels do I see, how much can I send today?"
+async fn wallet_overview(
+    State(state): State<AppState>,
+    Query(q): Query<WalletOverviewQuery>,
+) -> Json<WalletOverviewResponse> {
+    // Height for this snapshot
+    let universe = state.universe.lock().expect("universe lock poisoned");
+    let height = universe.height;
+    drop(universe);
+
+    let phone = q.phone.clone();
+
+    // Canon labels for now: comet, fun, gift1.
+    let label_names = vec!["comet", "fun", "gift1"];
+    let labels: Vec<LabelOverview> = label_names
+        .into_iter()
+        .map(|label| {
+            let receive_url = format!("https://dloG.com/{}/{}/receive/", phone, label);
+            let filesystem_path = format!(
+                "https://dloG.com/∞/;{};{};∞;∞;∞;∞;∞;∞;∞;∞;hash;",
+                phone, label
+            );
+            LabelOverview {
+                label: label.to_string(),
+                receive_url,
+                filesystem_path,
+            }
+        })
+        .collect();
+
+    // Gift / device caps based on provided "days since" knobs.
+    let gift_rules = GiftRules::default();
+    let device_rules = DeviceLimitsRules::default();
+
+    let gift_cap = q
+        .days_since_claim
+        .map(|d| gift_rules.daily_cap(d))
+        .unwrap_or(0);
+
+    let device_cap = q
+        .days_since_enroll
+        .map(|d| device_rules.daily_cap(d))
+        .unwrap_or(0);
+
+    let effective_cap = match (gift_cap, device_cap) {
+        (0, 0) => 0,
+        (g, 0) => g,
+        (0, d) => d,
+        (g, d) => g.min(d),
+    };
+
+    Json(WalletOverviewResponse {
+        phi: PHI,
+        height,
+        phone,
+        labels,
+        gift_daily_cap_dlog: gift_cap,
+        device_daily_cap_dlog: device_cap,
+        effective_send_cap_dlog: effective_cap,
     })
 }
