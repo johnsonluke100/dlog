@@ -7,5 +7,8 @@ node_name = "dlog-node-local"
 # Bind address for the HTTP API.
 bind_addr = "0.0.0.0:8080"
 
+# Public URL (optional). Leave empty or comment out if not needed.
+# public_url = "https://example.com"
+
 # Conceptual phi tick rate (Ω ticks per second).
 phi_tick_rate = 1000.0

@@ -1,13 +1,15 @@
 // api/src/main.rs
 //
 // Axum HTTP server that exposes:
-// - GET /health
-// - GET /config
-// - GET /snapshot
-// - GET /balance?phone=&label=
-// - POST /transfer  (body: TransferTx JSON)
+// - GET  /health
+// - GET  /config
+// - GET  /snapshot
+// - GET  /balance?phone=&label=
+// - POST /transfer        (body: TransferTx JSON)
+// - GET  /planets         (list φ-planet specs)
+// - GET  /phi_gravity?id= (φ^?-per-tick gravity profile)
 //
-// Later we will:
+// Later:
 // - add auth integration
 // - wire in real persistence and ∞ filesystem folding/unfolding.
 
@@ -19,9 +21,12 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use corelib::UniverseState;
+use corelib::{compute_phi_gravity, default_planets, UniverseState};
 use serde::{Deserialize, Serialize};
-use spec::{Balance, BalanceView, LabelId, NodeConfig, TransferTx, UniverseSnapshot};
+use spec::{
+    Balance, BalanceView, LabelId, NodeConfig, PhiGravityProfile, PlanetSpec, TransferTx,
+    UniverseSnapshot,
+};
 
 #[derive(Clone)]
 struct AppState {
@@ -35,12 +40,24 @@ struct BalanceQuery {
     label: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct PlanetQuery {
+    id: String,
+}
+
 #[derive(Debug, Serialize)]
 struct TransferResponse {
     ok: bool,
     error: Option<String>,
     from_balance: Option<Balance>,
     to_balance: Option<Balance>,
+}
+
+#[derive(Debug, Serialize)]
+struct PhiGravityResponse {
+    ok: bool,
+    error: Option<String>,
+    profile: Option<PhiGravityProfile>,
 }
 
 #[tokio::main]
@@ -52,6 +69,12 @@ async fn main() {
     if let Some(url) = &config.public_url {
         println!("api: public_url = {}", url);
     }
+
+    // Resolve bind address up front; fall back if parse fails.
+    let bind_addr: SocketAddr = config
+        .bind_addr
+        .parse()
+        .unwrap_or_else(|_| "0.0.0.0:8080".parse().unwrap());
 
     let mut universe = UniverseState::new();
     // Seed a tiny test balance so you can play with transfer immediately.
@@ -71,7 +94,7 @@ async fn main() {
 
     let state = AppState {
         universe: Arc::new(Mutex::new(universe)),
-        config,
+        config: config.clone(),
     };
 
     let app = Router::new()
@@ -80,14 +103,9 @@ async fn main() {
         .route("/snapshot", get(snapshot))
         .route("/balance", get(balance))
         .route("/transfer", post(transfer))
+        .route("/planets", get(planets))
+        .route("/phi_gravity", get(phi_gravity))
         .with_state(state);
-
-    let bind_addr = {
-        let cfg = &app.state().config;
-        cfg.bind_addr
-            .parse::<SocketAddr>()
-            .unwrap_or_else(|_| "0.0.0.0:8080".parse().unwrap())
-    };
 
     println!("api: listening on http://{bind_addr}");
     axum::Server::bind(&bind_addr)
@@ -167,6 +185,27 @@ async fn transfer(
             error: Some(e.to_string()),
             from_balance: Some(from_before),
             to_balance: Some(to_before),
+        }),
+    }
+}
+
+async fn planets() -> Json<Vec<PlanetSpec>> {
+    let list = default_planets();
+    Json(list)
+}
+
+async fn phi_gravity(Query(q): Query<PlanetQuery>) -> Json<PhiGravityResponse> {
+    let profile = compute_phi_gravity(&q.id);
+    match profile {
+        Some(p) => Json(PhiGravityResponse {
+            ok: true,
+            error: None,
+            profile: Some(p),
+        }),
+        None => Json(PhiGravityResponse {
+            ok: false,
+            error: Some(format!("unknown planet id '{}'", q.id)),
+            profile: None,
         }),
     }
 }

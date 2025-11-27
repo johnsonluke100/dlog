@@ -4,8 +4,8 @@ Root Rust workspace for the dlog universe.
 
 Crates:
 - `spec`    → shared types and models
-- `corelib` → universe logic (state machine, balances, snapshots)
-- `api`     → HTTP server exposing a minimal API
+- `corelib` → universe logic (state machine, balances, snapshots, φ-gravity)
+- `api`     → HTTP server exposing the node API
 
 Top-level:
 - `Dockerfile`         → container build for the `api` binary

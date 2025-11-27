@@ -84,6 +84,35 @@ pub struct BalanceView {
     pub balance: Balance,
 }
 
+/// PlanetSpec describes a planet's Ω-physics gravity via φ exponents.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanetSpec {
+    /// Stable identifier, e.g. "earth", "moon", "mars".
+    pub id: String,
+    /// Human-readable name.
+    pub name: String,
+    /// Dimension name for the shell world, e.g. "earth_shell".
+    pub shell_world: String,
+    /// Dimension name for the core world, e.g. "earth_core".
+    pub core_world: String,
+    /// φ exponent for "falling" acceleration on this planet.
+    pub phi_power_fall: f64,
+    /// φ exponent for "flying" acceleration on this planet.
+    pub phi_power_fly: f64,
+}
+
+/// PhiGravityProfile = concrete φ^? results for a planet.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhiGravityProfile {
+    pub planet_id: String,
+    pub phi_power_fall: f64,
+    pub phi_power_fly: f64,
+    /// Computed φ^phi_power_fall.
+    pub g_fall: f64,
+    /// Computed φ^phi_power_fly.
+    pub g_fly: f64,
+}
+
 /// Errors that can occur when we apply high-level actions.
 #[derive(Debug, thiserror::Error)]
 pub enum SpecError {
