@@ -96,3 +96,81 @@ pub enum SpecError {
     #[error("generic: {0}")]
     Generic(String),
 }
+
+//
+// Ω-monetary spec: auto-added by refold.command
+// This keeps corelib happy with spec::MonetarySpec while staying faithful
+// to the DLOG design (miner inflation + holder interest + φ-tuned block time).
+
+/// Ω-monetary parameters for a given DLOG universe.
+/// Values are expressed as fractional rates (0.088248 = 8.8248%).
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+pub struct MonetarySpec {
+    /// Annual miner inflation (e.g. 0.088248 for 8.8248%).
+    pub annual_miner_inflation: f64,
+    /// Annual holder interest (e.g. 0.618 for 61.8%).
+    pub annual_holder_interest: f64,
+    /// Target human-facing block time in seconds (approximate).
+    pub target_block_time_seconds: f64,
+    /// Numeric base for Ω accounting (should be 8 in DLOG).
+    pub numeric_base: u32,
+}
+
+impl MonetarySpec {
+    /// Create a new monetary spec with explicit parameters.
+    pub const fn new(
+        annual_miner_inflation: f64,
+        annual_holder_interest: f64,
+        target_block_time_seconds: f64,
+        numeric_base: u32,
+    ) -> Self {
+        Self {
+            annual_miner_inflation,
+            annual_holder_interest,
+            target_block_time_seconds,
+            numeric_base,
+        }
+    }
+
+    /// Canonical DLOG mainnet Ω-physics monetary spec.
+    pub fn dlog_mainnet() -> Self {
+        Self::new(0.088_248, 0.618, 8.0, 8)
+    }
+}
+
+impl Default for MonetarySpec {
+    fn default() -> Self {
+        Self::dlog_mainnet()
+    }
+}
+
+/// Binding between a planet and a monetary spec.
+/// This is mostly a convenience for corelib/api layers.
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+pub struct PlanetMonetaryBinding {
+    pub planet: PlanetId,
+    pub spec: MonetarySpec,
+}
+
+impl std::fmt::Display for PlanetMonetaryBinding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}(miner={:.4}%, holder={:.4}%, base={}, ~{}s)",
+            self.planet,
+            self.spec.annual_miner_inflation * 100.0,
+            self.spec.annual_holder_interest * 100.0,
+            self.spec.numeric_base,
+            self.spec.target_block_time_seconds,
+        )
+    }
+}
+
+/// Canonical Ω-physics monetary spec constant.
+pub const DLOG_MAINNET_SPEC: MonetarySpec = MonetarySpec {
+    annual_miner_inflation: 0.088_248,
+    annual_holder_interest: 0.618,
+    target_block_time_seconds: 8.0,
+    numeric_base: 8,
+};
+
