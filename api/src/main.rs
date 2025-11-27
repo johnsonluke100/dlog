@@ -1,4 +1,5 @@
 use axum::{routing::get, Json, Router};
+use tokio::net::TcpListener;
 use serde::Serialize;
 use spec::{MonetarySpec, PlanetGravityProfile, PLANET_PROFILES, PHI};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -16,10 +17,8 @@ async fn main() {
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 8888));
     tracing::info!("dlog Ω-api listening on http://{addr}");
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .expect("api server crashed");
+    let listener = TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
 
 fn init_tracing() {
