@@ -14,11 +14,10 @@
 // - GET  /land/locks?world=
 // - POST /land/mint
 // - POST /mc/register
+// - POST /mc/server_register
 //
-// /mc/register is the Minecraft bridge endpoint.
-// The plugin sends:
-//   { player_uuid, nickname?, planet_id, world, client_fps }
-// The node responds with TickTuning for that player.
+// /mc/register = player ↔ φ tuning.
+// /mc/server_register = vortex-style server topology map.
 
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -34,8 +33,8 @@ use corelib::{
 use serde::{Deserialize, Serialize};
 use spec::{
     Balance, BalanceView, LabelId, LabelUniversePath, LandLock, McRegisterRequest,
-    McRegisterResponse, NodeConfig, PhiGravityProfile, PlanetSpec, TickTuning, TransferTx,
-    UniverseSnapshot,
+    McRegisterResponse, McServerRegistrationRequest, McServerRegistrationResponse, NodeConfig,
+    PhiGravityProfile, PlanetSpec, TickTuning, TransferTx, UniverseSnapshot,
 };
 
 #[derive(Clone)]
@@ -164,6 +163,7 @@ async fn main() {
         .route("/land/locks", get(land_locks))
         .route("/land/mint", post(land_mint))
         .route("/mc/register", post(mc_register))
+        .route("/mc/server_register", post(mc_server_register))
         .with_state(state);
 
     println!("api: listening on http://{bind_addr}");
@@ -317,7 +317,6 @@ async fn omega_label_path(Query(q): Query<BalanceQuery>) -> Json<LabelUniversePa
 }
 
 /// List land locks, optionally filtered by world.
-/// GET /land/locks?world=earth_shell
 async fn land_locks(
     State(state): State<AppState>,
     Query(q): Query<LandListQuery>,
@@ -329,7 +328,6 @@ async fn land_locks(
 }
 
 /// Mint a new land lock into the universe.
-/// POST /land/mint
 async fn land_mint(
     State(state): State<AppState>,
     Json(req): Json<LandMintRequest>,
@@ -365,13 +363,6 @@ async fn land_mint(
 ///   "world": "world",
 ///   "client_fps": 144.0
 /// }
-///
-/// Returns:
-/// {
-///   "ok": true,
-///   "error": null,
-///   "tuning": { TickTuning ... }
-/// }
 async fn mc_register(
     State(state): State<AppState>,
     Json(req): Json<McRegisterRequest>,
@@ -389,4 +380,28 @@ async fn mc_register(
             tuning: None,
         }),
     }
+}
+
+/// POST /mc/server_register
+///
+/// Body:
+/// {
+///   "server_id": "velocity-main",
+///   "label": "vortex-velocity",
+///   "kind": "Velocity",
+///   "host": "127.0.0.1",
+///   "port": 25577,
+///   "metadata": "{\"plugins\":[\"Geyser\",\"Floodgate\",\"ViaVersion\"]}"
+/// }
+async fn mc_server_register(
+    State(state): State<AppState>,
+    Json(req): Json<McServerRegistrationRequest>,
+) -> Json<McServerRegistrationResponse> {
+    let mut guard = state.universe.lock().expect("universe lock poisoned");
+    let record = guard.register_mc_server(&req);
+    Json(McServerRegistrationResponse {
+        ok: true,
+        error: None,
+        server: Some(record),
+    })
 }

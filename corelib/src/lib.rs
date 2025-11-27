@@ -1,7 +1,7 @@
 // corelib/src/lib.rs
 //
 // Universe state machine + φ-gravity + Ω filesystem helpers + landlocks +
-// Minecraft bridge.
+// Minecraft bridge (players + servers).
 //
 // - In-memory maps for label balances.
 // - Simple transfer logic.
@@ -11,15 +11,16 @@
 // - LabelUniversePath constructor for Ω paths.
 // - Land lock registry in-memory.
 // - compute_tick_tuning to map server φ-ticks → client frames.
-// - McPlayerState + UniverseState.mc_players to track game clients,
-//   with register_mc_player() using NodeConfig.phi_tick_rate.
+// - McPlayerState + UniverseState.mc_players to track players.
+// - McServerRecord + UniverseState.mc_servers to track the vortex network.
 
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use spec::{
     Balance, BlockHeight, LabelId, LabelUniversePath, LandLock, McClientId, McRegisterRequest,
-    NodeConfig, PhiGravityProfile, PlanetSpec, SpecError, TickTuning, TransferTx, UniverseSnapshot,
+    McServerRecord, McServerRegistrationRequest, NodeConfig, PhiGravityProfile, PlanetSpec,
+    SpecError, TickTuning, TransferTx, UniverseSnapshot,
 };
 
 /// PHI = golden ratio, used as the Ω scaling constant.
@@ -48,6 +49,8 @@ pub struct UniverseState {
     pub last_snapshot: Option<UniverseSnapshot>,
     /// Minecraft clients known to this node, keyed by player_uuid.
     pub mc_players: HashMap<String, McPlayerState>,
+    /// Minecraft servers known to this node, keyed by server_id.
+    pub mc_servers: HashMap<String, McServerRecord>,
 }
 
 impl UniverseState {
@@ -58,6 +61,7 @@ impl UniverseState {
             land_locks: Vec::new(),
             last_snapshot: None,
             mc_players: HashMap::new(),
+            mc_servers: HashMap::new(),
         }
     }
 
@@ -168,10 +172,7 @@ impl UniverseState {
         lock
     }
 
-    /// Register or update a Minecraft player according to a McRegisterRequest.
-    ///
-    /// Uses the NodeConfig.phi_tick_rate and the planet's φ exponents to compute
-    /// TickTuning for this client, then stores it into mc_players.
+    /// Register or update a Minecraft player.
     pub fn register_mc_player(
         &mut self,
         config: &NodeConfig,
@@ -206,6 +207,27 @@ impl UniverseState {
             .insert(req.player_uuid.clone(), state.clone());
 
         Ok(state)
+    }
+
+    /// Register or update a Minecraft server (vortex-style).
+    pub fn register_mc_server(
+        &mut self,
+        req: &McServerRegistrationRequest,
+    ) -> McServerRecord {
+        let record = McServerRecord {
+            server_id: req.server_id.clone(),
+            label: req.label.clone(),
+            kind: req.kind.clone(),
+            host: req.host.clone(),
+            port: req.port,
+            metadata: req.metadata.clone(),
+            last_seen_ms: Self::current_timestamp_ms(),
+        };
+
+        self.mc_servers
+            .insert(req.server_id.clone(), record.clone());
+
+        record
     }
 }
 
@@ -281,13 +303,6 @@ pub fn label_universe_path(phone: &str, label: &str) -> LabelUniversePath {
 }
 
 /// Compute how server φ-ticks map into client frames for a given planet.
-///
-/// - `phi_tick_rate` = conceptual server ticks per second from config.
-/// - `client_fps`    = frames per second on the client.
-/// - `planet_id`     = which planet's φ-exponents to use.
-///
-/// Returns a TickTuning that the game client can plug directly into its
-/// per-frame velocity integration.
 pub fn compute_tick_tuning(
     phi_tick_rate: f64,
     client_fps: f64,

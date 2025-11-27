@@ -6,7 +6,7 @@
 // - Planets + φ-gravity profiles
 // - Ω filesystem helpers (label universe path)
 // - Tick tuning model (how φ-ticks map to client frames)
-// - Minecraft bridge request/response types
+// - Minecraft bridge types (players + servers)
 
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +14,6 @@ use serde::{Deserialize, Serialize};
 pub type BlockHeight = u64;
 
 /// A simple label identifier: phone number + label name.
-/// This is how we refer to a "slice" of the universe belonging to a person.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct LabelId {
     /// Phone number as a string, e.g. "9132077554".
@@ -118,7 +117,6 @@ pub struct PhiGravityProfile {
 }
 
 /// Tick tuning result for a client on a given planet.
-/// This is what the Minecraft plugin / game client will actually consume.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TickTuning {
     /// Planet id, e.g. "earth".
@@ -177,6 +175,58 @@ pub struct McRegisterResponse {
     pub error: Option<String>,
     /// φ tick tuning for this client on this planet.
     pub tuning: Option<TickTuning>,
+}
+
+/// Type of Minecraft server node (vortex-style).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum McServerKind {
+    /// Velocity proxy (front door).
+    Velocity,
+    /// Bungee / lobby level.
+    Lobby,
+    /// Actual gameplay world (Paper/Spigot).
+    World,
+    /// Geyser / Bedrock bridge or equivalent.
+    BedrockProxy,
+    /// Anything else or experimental.
+    Other,
+}
+
+/// Request to register a Minecraft server node in the topology.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McServerRegistrationRequest {
+    /// Unique id for this server (can be host:port, or logical name).
+    pub server_id: String,
+    /// Human-readable label, e.g. "vortex-proxy", "lobby-1", "earth-shell-01".
+    pub label: String,
+    /// Kind of server (Velocity, Lobby, World, BedrockProxy, Other).
+    pub kind: McServerKind,
+    /// IP or host (if available).
+    pub host: Option<String>,
+    /// Port (if available).
+    pub port: Option<u16>,
+    /// Optional extra JSON metadata (e.g. current TPS, player count).
+    pub metadata: Option<String>,
+}
+
+/// Server record stored in the universe.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McServerRecord {
+    pub server_id: String,
+    pub label: String,
+    pub kind: McServerKind,
+    pub host: Option<String>,
+    pub port: Option<u16>,
+    pub metadata: Option<String>,
+    pub last_seen_ms: i64,
+}
+
+/// Response to /mc/server_register.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McServerRegistrationResponse {
+    pub ok: bool,
+    pub error: Option<String>,
+    pub server: Option<McServerRecord>,
 }
 
 /// Errors that can occur when we apply high-level actions.
