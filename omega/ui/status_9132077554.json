@@ -1,0 +1,51 @@
+{
+  "phone": "9132077554",
+  "scalar_9_infinity": 4,
+  "phi": 1.6180339887498948482,
+  "monetary": {
+    "miner_apy": 0.088248,
+    "holder_apy": 0.618,
+    "target_block_seconds": 8.0,
+    "blocks_per_year": 3942000
+  },
+  "beat": {
+    "target_block_seconds": 8.0,
+    "blocks_per_year": 3942000,
+    "blocks_per_min": 7.5000,
+    "blocks_per_hour": 450.0000,
+    "blocks_per_day": 10800.0000,
+    "tick_hz": .125000
+  },
+  "labels": {
+    "vortex": {
+      "universe_id": "d863c1010f4b5c20",
+      "fs": "/Users/lj/Desktop/dlog/omega/infinity/labels/9132077554/vortex/d863c1010f4b5c20",
+      "url": "https://dloG.com/infinity/labels/9132077554/vortex/d863c1010f4b5c20",
+      "orbit_year": {
+        "principal": 1.0,
+        "blocks": 3942000,
+        "approx_holder_balance_after_orbit": 1.618000000000
+      },
+      "orbit_short": {
+        "principal": 1.0,
+        "blocks": 8888,
+        "approx_holder_balance_after_orbit": 1.001393400304
+      }
+    },
+    "comet": {
+      "universe_id": "0184fe391f3ae73f",
+      "fs": "/Users/lj/Desktop/dlog/omega/infinity/labels/9132077554/comet/0184fe391f3ae73f",
+      "url": "https://dloG.com/infinity/labels/9132077554/comet/0184fe391f3ae73f",
+      "orbit_year": {
+        "principal": 1.0,
+        "blocks": 3942000,
+        "approx_holder_balance_after_orbit": 1.618000000000
+      },
+      "orbit_short": {
+        "principal": 1.0,
+        "blocks": 8888,
+        "approx_holder_balance_after_orbit": 1.001393400304
+      }
+    }
+  }
+}
