@@ -7,9 +7,9 @@ use dlog_core::init_universe;
 use dlog_corelib::{UniverseError, UniverseState};
 use dlog_spec::{
     AccessGrant, AccessRole, Address, Amount, AirdropNetworkRules, BlockHeight, DeviceLimitsRules,
-    FlightLawConfig, GenesisConfig, GiftRules, LabelUniverseHash, LabelUniverseKey, LandAuctionRules,
-    LandGridCoord, LandLock, LandTier, MonetaryPolicy, OmegaFilesystemSnapshot, OmegaMasterRoot,
-    PlanetId, SolarSystemConfig,
+    FlightLawConfig, GenesisConfig, GiftRules, LabelUniverseHash, LabelUniverseKey,
+    LandAuctionRules, LandGridCoord, LandLock, LandTier, MonetaryPolicy, OmegaFilesystemSnapshot,
+    OmegaMasterRoot, PlanetId, SolarSystemConfig,
 };
 use dlog_sky::SkyTimeline;
 use serde::{Deserialize, Serialize};
@@ -20,6 +20,8 @@ use std::{
 };
 use tokio::time::{interval, Duration};
 use tracing_subscriber::EnvFilter;
+
+const PHI: f64 = 1.618_033_988_749_895_f64;
 
 #[derive(Clone)]
 struct AppState {
@@ -146,6 +148,23 @@ struct LandAdjacencyExampleResponse {
     ac_adjacent: bool,
 }
 
+#[derive(Serialize)]
+struct PlanetGravityRow {
+    planet: String,
+    phi_exponent: f64,
+    accel_per_tick: f64,
+    accel_per_frame_60fps: f64,
+    accel_per_frame_144fps: f64,
+    accel_per_frame_1000fps: f64,
+}
+
+#[derive(Serialize)]
+struct PlanetGravityTableResponse {
+    phi: f64,
+    server_ticks_per_second: f64,
+    rows: Vec<PlanetGravityRow>,
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -168,11 +187,11 @@ async fn main() {
     // Background block ticker (Ω heartbeat)
     // -----------------------------
     //
-    // This is the "real-world tick" you talked about:
+    // This is the "real-world tick":
     //   - One block ≈ one attention sweep through the active universe.
     //   - Here we approximate it as once every 8 seconds.
     //
-    // The internal PHI_TICK_HZ is free to be much higher for micro-steps;
+    // The internal PHI_TICK_HZ can be much higher for micro-steps;
     // this ticker is the big block heartbeat.
     let ticker_state = state.clone();
     let block_interval_secs = 8.0; // block ≈ 8 seconds, human-friendly
@@ -210,6 +229,7 @@ async fn main() {
         .route("/omega/root", get(omega_root))
         .route("/solar/system", get(solar_system))
         .route("/flight/law", get(flight_law))
+        .route("/flight/planet_gravity_table", get(planet_gravity_table))
         .with_state(state);
 
     tracing::info!(
@@ -436,4 +456,44 @@ async fn solar_system() -> Json<SolarSystemResponse> {
 async fn flight_law() -> Json<FlightLawResponse> {
     let law = FlightLawConfig::canon();
     Json(FlightLawResponse { law })
+}
+
+async fn planet_gravity_table() -> Json<PlanetGravityTableResponse> {
+    // Canonical Ω "real-world" tick rate:
+    // server-side heartbeat is pegged at 1000 Hz.
+    let server_tps = 1000.0_f64;
+
+    let make_row = |planet: &str, phi_exponent: f64| {
+        let accel_per_tick = PHI.powf(phi_exponent);
+        let accel_per_frame_60 = accel_per_tick * (server_tps / 60.0);
+        let accel_per_frame_144 = accel_per_tick * (server_tps / 144.0);
+        let accel_per_frame_1000 = accel_per_tick * (server_tps / 1000.0);
+
+        PlanetGravityRow {
+            planet: planet.to_string(),
+            phi_exponent,
+            accel_per_tick,
+            accel_per_frame_60fps: accel_per_frame_60,
+            accel_per_frame_144fps: accel_per_frame_144,
+            accel_per_frame_1000fps: accel_per_frame_1000,
+        }
+    };
+
+    // Lore picks (φ^?-per-tick per planet):
+    // - Sun_shell: heaviest pull
+    // - Earth_shell: baseline 1.0
+    // - Moon_shell: floaty
+    // - Mars_shell: between Moon and Earth
+    let rows = vec![
+        make_row("Sun_shell", 1.5),
+        make_row("Earth_shell", 1.0),
+        make_row("Moon_shell", 0.4),
+        make_row("Mars_shell", 0.8),
+    ];
+
+    Json(PlanetGravityTableResponse {
+        phi: PHI,
+        server_ticks_per_second: server_tps,
+        rows,
+    })
 }
