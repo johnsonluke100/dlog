@@ -59,7 +59,7 @@ struct TransferResponse {
     error: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct SkyCurrentResponse {
     tick: u64,
     slide_id: u32,
@@ -254,6 +254,21 @@ struct ClientsResponse {
     entries: Vec<ClientCapability>,
 }
 
+/// Full universe snapshot: a single JSON that lets a client join Ω in one shot.
+#[derive(Serialize)]
+struct UniverseSnapshotResponse {
+    phi: f64,
+    heartbeat_hz: f64,
+    height: u64,
+    money_policy: MonetaryPolicy,
+    approx_total_apy: f64,
+    solar_system: SolarSystemConfig,
+    flight_law: FlightLawConfig,
+    omega_root: OmegaFilesystemSnapshot,
+    example_lock: LandLock,
+    sky: SkyCurrentResponse,
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -322,6 +337,7 @@ async fn main() {
         .route("/flight/tuning", get(flight_tuning))
         .route("/omega/flames", get(omega_flames))
         .route("/clients", get(clients_manifest))
+        .route("/universe/snapshot", get(universe_snapshot))
         .with_state(state);
 
     tracing::info!(
@@ -733,5 +749,107 @@ async fn clients_manifest(State(state): State<AppState>) -> Json<ClientsResponse
         phi: PHI,
         heartbeat_hz: tick_hz,
         entries,
+    })
+}
+
+/// One-shot full universe snapshot, aligned with your canon memo.
+async fn universe_snapshot(State(state): State<AppState>) -> Json<UniverseSnapshotResponse> {
+    // Height + heartbeat
+    let universe = state.universe.lock().expect("universe lock poisoned");
+    let height = universe.height;
+    let heartbeat_hz = universe.config.phi_tick_hz;
+    drop(universe);
+
+    // Money policy
+    let money_policy = MonetaryPolicy::default();
+    let approx_total_apy = money_policy.total_apy();
+
+    // Solar + flight
+    let solar_system = SolarSystemConfig::canon();
+    let flight_law = FlightLawConfig::canon();
+
+    // Omega root snapshot (same as /omega/root)
+    let master_root = OmegaMasterRoot {
+        scalar: ";∞;∞;∞;∞;∞;∞;∞;∞;∞;".to_string(),
+    };
+
+    let comet_key = LabelUniverseKey {
+        phone: "9132077554".to_string(),
+        label: "comet".to_string(),
+    };
+    let fun_key = LabelUniverseKey {
+        phone: "9132077554".to_string(),
+        label: "fun".to_string(),
+    };
+
+    let label_hashes = vec![
+        LabelUniverseHash {
+            key: comet_key,
+            hash: "omega_hash_comet_v1".to_string(),
+        },
+        LabelUniverseHash {
+            key: fun_key,
+            hash: "omega_hash_fun_v1".to_string(),
+        },
+    ];
+
+    let omega_root = OmegaFilesystemSnapshot {
+        master_root,
+        label_hashes,
+    };
+
+    // Example land lock (same canon as /land/example_lock)
+    let example_lock = LandLock {
+        id: 1,
+        owner_phone: "9132077554".to_string(),
+        world: PlanetId::EarthShell,
+        tier: LandTier::Emerald,
+        x: 0,
+        z: 0,
+        size: 16,
+        created_at_block: 0,
+        last_visited_block: 0,
+        zillow_estimate_dlog: 1_000_000,
+        shared_with: vec![AccessGrant {
+            player_id: "friend_player_id".to_string(),
+            role: AccessRole::Builder,
+        }],
+        in_auction: false,
+    };
+
+    // Current sky slide (reuse the same logic as /sky/current)
+    let universe = state.universe.lock().expect("universe lock poisoned");
+    let tick_hz = universe.config.phi_tick_hz;
+    drop(universe);
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let ticks = (now.as_secs_f64() * tick_hz).floor() as u64;
+
+    let sky_timeline = state.sky.lock().expect("sky lock poisoned");
+    let slide = sky_timeline
+        .slide_at_tick(ticks)
+        .cloned()
+        .unwrap_or_else(|| dlog_spec::SkyShowConfig::default_eight().slides[0].clone());
+
+    let sky = SkyCurrentResponse {
+        tick: ticks,
+        slide_id: slide.id,
+        path: slide.path,
+        duration_ticks: slide.duration_ticks,
+    };
+
+    Json(UniverseSnapshotResponse {
+        phi: PHI,
+        heartbeat_hz,
+        height,
+        money_policy,
+        approx_total_apy,
+        solar_system,
+        flight_law,
+        omega_root,
+        example_lock,
+        sky,
     })
 }
