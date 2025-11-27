@@ -131,7 +131,8 @@ impl MonetaryPolicy {
                 "Miner inflation ~8.8248% APY – global firehose.".into(),
                 "Holder interest 61.8% APY – personal growth tree.".into(),
                 "Total supply expansion ~70%+ / year – printing is intentional.".into(),
-                "Block time is Ω-attention based; 8s is an NPC-layer UI hint only.".into(),
+                "Block time is Ω-attention based; 8s is an NPC-layer UI hint only."
+                    .into(),
                 "All rate fields above are NPC decimals; octal basis points are canonical."
                     .into(),
             ],
@@ -477,6 +478,25 @@ impl SolarSystemAligned {
     }
 }
 
+/* ========= Runtime Spine & Platforms ========= */
+
+#[derive(Debug, Serialize)]
+struct LanguageSpine {
+    spine_language: String,
+    canonical_number_base: u8,
+    notes: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct ClientPlatformDescriptor {
+    id: String,
+    display_name: String,
+    surface_language: String,
+    is_core_spine: bool,
+    requires_phone_binding: bool,
+    description: String,
+}
+
 /* ========= Snapshots & DTOs ========= */
 
 #[derive(Debug, Clone, Serialize)]
@@ -532,14 +552,26 @@ struct OctalEncoding {
     base: u8,
 }
 
+/* ========= Vibe / Hype ========= */
+
+#[derive(Debug, Serialize)]
+struct VibeAnthem {
+    line: String,
+    block_height: u64,
+    block_height_octal: String,
+    hype_level: u8,
+    phi_tick_hz: f64,
+    notes: Vec<String>,
+}
+
 /* ========= Handlers ========= */
 
 async fn root() -> Json<RootResponse> {
     let mode = env::var("DLOG_RUNTIME_MODE").unwrap_or_else(|_| "testing_local".into());
     Json(RootResponse {
         service: "dlog-api".into(),
-        version: "0.2.1".into(),
-        message: "Ω heartbeat online; solar rail aligned; base-8 canon engaged; Rust-only spine."
+        version: "0.2.2".into(),
+        message: "Ω heartbeat online; solar rail aligned; base-8 canon engaged; Rust-only spine; hype rail armed."
             .into(),
         mode_hint: mode,
     })
@@ -814,6 +846,109 @@ async fn encode_octal(Path(value): Path<u64>) -> Json<OctalEncoding> {
     })
 }
 
+/* ---- Runtime Spine & Platforms ---- */
+
+async fn get_language_spine() -> Json<LanguageSpine> {
+    Json(LanguageSpine {
+        spine_language: "Rust".into(),
+        canonical_number_base: CANONICAL_BASE,
+        notes: vec![
+            "Rust is the only language allowed to define Ω-consensus rules."
+                .into(),
+            "Other languages (Python/Java/JS/etc.) may exist only as clients, SDKs, or views."
+                .into(),
+            "Base-8 is the canonical numeric representation; base-10 is for NPC tooling."
+                .into(),
+        ],
+    })
+}
+
+async fn get_platforms() -> Json<Vec<ClientPlatformDescriptor>> {
+    Json(vec![
+        ClientPlatformDescriptor {
+            id: "mc_java_pc".into(),
+            display_name: "Minecraft Java – PC".into(),
+            surface_language: "Java".into(),
+            is_core_spine: false,
+            requires_phone_binding: true,
+            description:
+                "PC client riding the Rust Ω-node via MC server bridge. Java is just the puppet, Rust is the puppeteer."
+                    .into(),
+        },
+        ClientPlatformDescriptor {
+            id: "mc_bedrock_console".into(),
+            display_name: "Minecraft Bedrock – Xbox / PlayStation".into(),
+            surface_language: "C++ / platform-native".into(),
+            is_core_spine: false,
+            requires_phone_binding: true,
+            description:
+                "Consoles borrow their silicon to mine and play; settlement and rules live in Rust."
+                    .into(),
+        },
+        ClientPlatformDescriptor {
+            id: "mc_pe".into(),
+            display_name: "Minecraft Pocket Edition".into(),
+            surface_language: "C++ / mobile-native".into(),
+            is_core_spine: false,
+            requires_phone_binding: true,
+            description:
+                "Pocket Edition plugs into the Ω grid; phone biometrics are your key to DLOG."
+                    .into(),
+        },
+        ClientPlatformDescriptor {
+            id: "web_browser".into(),
+            display_name: "Web Browser".into(),
+            surface_language: "JavaScript / TypeScript (surface only)".into(),
+            is_core_spine: false,
+            requires_phone_binding: true,
+            description:
+                "Browser speaks HTTP/JSON to Rust. JS draws pixels; Rust defines reality."
+                    .into(),
+        },
+    ])
+}
+
+/* ---- Vibe / Hype ---- */
+
+async fn get_vibe_anthem(State(state): State<AppState>) -> Json<VibeAnthem> {
+    let uni = state
+        .universe
+        .read()
+        .expect("universe rwlock poisoned on read");
+
+    let bh = uni.block_height;
+    let bh_oct = to_octal_u64(bh);
+
+    // Simple hype level: last three octal digits → 0–7.
+    let hype_digit = bh_oct
+        .chars()
+        .last()
+        .unwrap_or('7')
+        .to_digit(8)
+        .unwrap_or(7) as u8;
+    let hype_level = if hype_digit == 0 { 8 } else { hype_digit };
+
+    let line = format!(
+        "block {bh} (octal {bh_oct}) – solar rail lined up, φ-per-tick locked in, you are the camera the universe spawned to admire itself."
+    );
+
+    Json(VibeAnthem {
+        line,
+        block_height: bh,
+        block_height_octal: bh_oct,
+        hype_level,
+        phi_tick_hz: uni.phi_tick_hz,
+        notes: vec![
+            "Every Ω-tick you run this, the hype level can evolve with the octal rail."
+                .into(),
+            "Ethic creed active: ;🌟 i borrow everything from evil and i serve everything to good 🌟;"
+                .into(),
+            "You are not small inside the solar system; the solar system is a local pattern inside your field of attention."
+                .into(),
+        ],
+    })
+}
+
 /* ========= Bootstrap ========= */
 
 #[tokio::main]
@@ -858,6 +993,9 @@ async fn main() {
         .route("/solar/eclipse", get(get_solar_eclipse))
         .route("/solar/bodies", get(get_solar_bodies))
         .route("/encoding/octal/u64/:value", get(encode_octal))
+        .route("/runtime/language_spine", get(get_language_spine))
+        .route("/runtime/platforms", get(get_platforms))
+        .route("/vibe/anthem", get(get_vibe_anthem))
         .with_state(state)
         // Very loose CORS for local dev; lock this down later.
         .layer(CorsLayer::very_permissive());
