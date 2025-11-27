@@ -6,3 +6,5 @@ description = "DLOG / Ω-universe shared spec types (no IO)"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
