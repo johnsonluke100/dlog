@@ -1,31 +1,26 @@
 # dlog workspace
 
-Root Rust workspace for the dlog universe.
+Root Rust workspace for the DLOG / Ω universe.
 
 Crates:
-- `spec`    → shared types and models (labels, balances, landlocks, planets, Ω paths, tick tuning, MC bridge types)
-- `corelib` → universe logic (state machine, balances, snapshots, φ-gravity, Ω helpers, land registry, MC player + server state)
-- `api`     → HTTP server exposing the node API
+
+- `spec`      → shared types and models (addresses, planets, config, constants)
+- `corelib`   → universe logic (state machine, balances, interest ticks)
+- `core`      → coordination layer between phi physics and chain logic
+- `omega`     → Omega Phi 8888 Hz "Leidenfrost Flame Engine" (Rust rework of omega_numpy_container)
+- `api`       → HTTP server exposing a minimal JSON API over the universe
 
 Top-level:
-- `Dockerfile`         → container build for the `api` binary
-- `docker-compose.yml` → orchestration for running `api` in Docker
-- `dlog.toml`          → node configuration (bind address, name, phi tick rate)
 
-HTTP endpoints (current sketch):
-- `GET  /health`
-- `GET  /config`
-- `GET  /snapshot`
-- `GET  /balance?phone=&label=`
-- `POST /transfer`
-- `GET  /planets`
-- `GET  /phi_gravity?id=earth`
-- `GET  /ticks/tune?fps=&planet=`
-- `GET  /omega/master_root`
-- `GET  /omega/label_path?phone=&label=`
-- `GET  /land/locks?world=`
-- `POST /land/mint`
-- `POST /mc/register`        → MC player ↔ φ tuning
-- `POST /mc/server_register` → vortex-style MC server topology map
+- `Cargo.toml`          → workspace definition
+- `rust-toolchain.toml` → pinned toolchain for reproducible builds
+- `dlog.toml`           → node configuration (bind, phi, paths)
+- `Dockerfile`          → container build for the `dlog-api` binary
+- `docker-compose.yml`  → simple compose stack for local docker runs
 
-Use `dlog.command` on the Desktop as the only launcher.
+Launcher:
+
+- `~/Desktop/dlog.command` is the ONLY launcher that spins everything up:
+  - Exports `OMEGA_ROOT`
+  - Starts `dlog-omega` in the background (endless tuning fork)
+  - Runs `dlog-api` in the foreground

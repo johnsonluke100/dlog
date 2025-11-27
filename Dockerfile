@@ -1,33 +1,23 @@
-# Dockerfile at ~/Desktop/dlog
-#
-# Builds the `api` binary via a multi-stage build and runs it on a slim base.
+# Multi-stage build for dlog-api
+FROM rust:1.80 AS builder
 
-# 1. Build stage
-FROM rust:1.81 as builder
+WORKDIR /app
+COPY . .
 
-WORKDIR /usr/src/dlog
+# Build the API binary
+RUN cargo build --release -p dlog-api
 
-# Copy workspace manifests and sources
-COPY Cargo.toml rust-toolchain.toml ./
-COPY dlog.toml ./dlog.toml
-COPY spec ./spec
-COPY corelib ./corelib
-COPY api ./api
-
-# Build the `api` crate in release mode
-RUN cargo build --release -p api
-
-# 2. Runtime stage
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN useradd -m dlog
+USER dlog
 
 WORKDIR /app
 
-# Copy compiled binary and config from build stage
-COPY --from=builder /usr/src/dlog/target/release/api /app/api
-COPY --from=builder /usr/src/dlog/dlog.toml /app/dlog.toml
+COPY --from=builder /app/target/release/dlog-api /usr/local/bin/dlog-api
 
-EXPOSE 8080
+ENV RUST_LOG=info
 
-CMD ["/app/api"]
+EXPOSE 8888
+
+CMD ["dlog-api"]

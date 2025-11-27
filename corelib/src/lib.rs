@@ -1,335 +1,106 @@
-// corelib/src/lib.rs
-//
-// Universe state machine + φ-gravity + Ω filesystem helpers + landlocks +
-// Minecraft bridge (players + servers).
-//
-// - In-memory maps for label balances.
-// - Simple transfer logic.
-// - Snapshot folding that increments a height counter,
-//   with a 9∞-style master_root string.
-// - Planet list and φ^?-per-tick gravity profiles.
-// - LabelUniversePath constructor for Ω paths.
-// - Land lock registry in-memory.
-// - compute_tick_tuning to map server φ-ticks → client frames.
-// - McPlayerState + UniverseState.mc_players to track players.
-// - McServerRecord + UniverseState.mc_servers to track the vortex network.
+//! Core logic for the DLOG / Ω universe state machine.
 
-use std::collections::HashMap;
-
+use dlog_spec::{AccountState, Address, Amount, PlanetId, UniverseConfig, UniverseSnapshot, PHI};
 use serde::{Deserialize, Serialize};
-use spec::{
-    Balance, BlockHeight, LabelId, LabelUniversePath, LandLock, McClientId, McRegisterRequest,
-    McServerRecord, McServerRegistrationRequest, NodeConfig, PhiGravityProfile, PlanetSpec,
-    SpecError, TickTuning, TransferTx, UniverseSnapshot,
-};
+use std::collections::HashMap;
+use thiserror::Error;
 
-/// PHI = golden ratio, used as the Ω scaling constant.
-pub const PHI: f64 = 1.618_033_988_749_895_f64;
-
-/// Runtime state for a single Minecraft player.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McPlayerState {
-    pub client_id: McClientId,
-    pub nickname: Option<String>,
-    pub planet_id: String,
-    pub world: String,
-    pub last_fps: f64,
-    pub last_seen_ms: i64,
-    pub last_tuning: TickTuning,
+/// Errors that can occur when mutating universe state.
+#[derive(Debug, Error)]
+pub enum UniverseError {
+    #[error("insufficient balance")]
+    InsufficientBalance,
+    #[error("unknown account")]
+    UnknownAccount,
 }
 
-/// UniverseState (temporary, in-memory only).
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+/// Mutable universe state kept in memory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UniverseState {
-    /// Balance per label.
-    pub balances: HashMap<LabelId, Balance>,
-    /// Registered land locks.
-    pub land_locks: Vec<LandLock>,
-    /// The last known snapshot, if any.
-    pub last_snapshot: Option<UniverseSnapshot>,
-    /// Minecraft clients known to this node, keyed by player_uuid.
-    pub mc_players: HashMap<String, McPlayerState>,
-    /// Minecraft servers known to this node, keyed by server_id.
-    pub mc_servers: HashMap<String, McServerRecord>,
+    pub height: u64,
+    pub accounts: HashMap<Address, AccountState>,
+    pub config: UniverseConfig,
 }
 
 impl UniverseState {
-    /// Create a new empty universe state.
-    pub fn new() -> Self {
+    pub fn new(config: UniverseConfig) -> Self {
         Self {
-            balances: HashMap::new(),
-            land_locks: Vec::new(),
-            last_snapshot: None,
-            mc_players: HashMap::new(),
-            mc_servers: HashMap::new(),
+            height: 0,
+            accounts: HashMap::new(),
+            config,
         }
     }
 
-    /// Get current balance for a label; returns zero if absent.
-    pub fn balance_of(&self, label: &LabelId) -> Balance {
-        self.balances
-            .get(label)
-            .copied()
-            .unwrap_or(Balance { amount: 0 })
+    pub fn snapshot(&self) -> UniverseSnapshot {
+        UniverseSnapshot {
+            height: self.height,
+            accounts: self.accounts.clone(),
+        }
     }
 
-    /// Set balance for a label.
-    pub fn set_balance(&mut self, label: LabelId, balance: Balance) {
-        self.balances.insert(label, balance);
+    pub fn upsert_account(&mut self, account: AccountState) {
+        self.accounts.insert(account.address.clone(), account);
     }
 
-    /// Apply a simple transfer transaction.
-    pub fn apply_transfer(&mut self, tx: &TransferTx) -> Result<(), SpecError> {
-        if tx.amount == 0 {
-            return Err(SpecError::InvalidAmount);
+    fn account_mut(&mut self, addr: &Address) -> Result<&mut AccountState, UniverseError> {
+        self.accounts.get_mut(addr).ok_or(UniverseError::UnknownAccount)
+    }
+
+    pub fn transfer(
+        &mut self,
+        from: &Address,
+        to: &Address,
+        amount: Amount,
+    ) -> Result<(), UniverseError> {
+        if amount.dlog == 0 {
+            return Ok(());
         }
 
-        let from_balance = self.balance_of(&tx.from);
-        if from_balance.amount < tx.amount {
-            return Err(SpecError::InsufficientBalance);
+        {
+            let from_acc = self.account_mut(from)?;
+            if from_acc.balance.dlog < amount.dlog {
+                return Err(UniverseError::InsufficientBalance);
+            }
+            from_acc.balance = from_acc.balance.saturating_sub(amount);
         }
 
-        let to_balance = self.balance_of(&tx.to);
-
-        let new_from = Balance {
-            amount: from_balance.amount - tx.amount,
-        };
-        let new_to = Balance {
-            amount: to_balance.amount + tx.amount,
-        };
-
-        self.set_balance(tx.from.clone(), new_from);
-        self.set_balance(tx.to.clone(), new_to);
+        {
+            let to_acc = self
+                .accounts
+                .entry(to.clone())
+                .or_insert(AccountState {
+                    address: to.clone(),
+                    planet: PlanetId::EarthShell,
+                    balance: Amount::ZERO,
+                });
+            to_acc.balance = to_acc.balance.saturating_add(amount);
+        }
 
         Ok(())
     }
 
-    /// Fold the current state into a UniverseSnapshot.
-    /// We bump the height and encode a 9∞-style master root.
-    pub fn fold_snapshot(&mut self) -> UniverseSnapshot {
-        let new_height: BlockHeight = self
-            .last_snapshot
-            .as_ref()
-            .map(|s| s.height + 1)
-            .unwrap_or(0);
-
-        let timestamp_ms = Self::current_timestamp_ms();
-        let master_root = Self::encode_master_root(new_height, timestamp_ms);
-
-        let snapshot = UniverseSnapshot {
-            height: new_height,
-            master_root,
-            timestamp_ms,
-        };
-
-        self.last_snapshot = Some(snapshot.clone());
-        snapshot
-    }
-
-    fn current_timestamp_ms() -> i64 {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default();
-        now.as_millis() as i64
-    }
-
-    /// Encode the 9∞ master root string for a given height/timestamp.
+    /// Apply one phi-based holder-interest tick to all balances.
     ///
-    /// Pattern:
-    /// ;∞;∞;∞;∞;∞;∞;∞;∞;∞;height;<H>;time;<T>;
-    fn encode_master_root(height: BlockHeight, timestamp_ms: i64) -> String {
-        format!(
-            ";∞;∞;∞;∞;∞;∞;∞;∞;∞;height;{};time;{};",
-            height, timestamp_ms
-        )
-    }
+    /// This approximates 61.8% APY by compounding every phi-tick.
+    pub fn apply_interest_tick(&mut self) {
+        // For now, use a simple approximation: one tiny growth per "block".
+        // APY = (1 + r)^(ticks_per_year) - 1 ≈ 0.618
+        // We can refine this later with a real formula or table.
+        let ticks_per_year = self.config.phi_tick_hz * 3600.0 * 24.0 * 365.0;
+        let base = 1.618_f64;
+        let r_per_year = base - 1.0; // ~0.618
+        let r_per_tick = r_per_year / ticks_per_year.max(1.0);
 
-    /// Immutable view of all land locks.
-    pub fn all_land_locks(&self) -> &[LandLock] {
-        &self.land_locks
-    }
-
-    /// Return all land locks, optionally filtered by world.
-    pub fn locks_by_world(&self, world: Option<&str>) -> Vec<LandLock> {
-        match world {
-            Some(w) => self
-                .land_locks
-                .iter()
-                .filter(|l| l.world == w)
-                .cloned()
-                .collect(),
-            None => self.land_locks.clone(),
+        for account in self.accounts.values_mut() {
+            let before = account.balance.dlog as f64;
+            let after = before * (1.0 + r_per_tick);
+            account.balance.dlog = after.round() as u128;
         }
     }
 
-    /// Mint a new land lock into the universe.
-    pub fn mint_lock(&mut self, mut lock: LandLock) -> LandLock {
-        if lock.id.is_empty() {
-            lock.id = format!("{}:{}:{}:{}", lock.world, lock.x, lock.z, lock.tier);
-        }
-        self.land_locks.push(lock.clone());
-        lock
+    /// Advance one "block"/attention tick.
+    pub fn tick_block(&mut self) {
+        self.height = self.height.saturating_add(1);
+        self.apply_interest_tick();
     }
-
-    /// Register or update a Minecraft player.
-    pub fn register_mc_player(
-        &mut self,
-        config: &NodeConfig,
-        req: &McRegisterRequest,
-    ) -> Result<McPlayerState, SpecError> {
-        if req.client_fps <= 0.0 {
-            return Err(SpecError::Generic(
-                "client_fps must be > 0 in McRegisterRequest".to_string(),
-            ));
-        }
-
-        let tuning = compute_tick_tuning(config.phi_tick_rate, req.client_fps, &req.planet_id)
-            .ok_or_else(|| {
-                SpecError::Generic(format!("unknown planet id '{}'", req.planet_id))
-            })?;
-
-        let client_id = McClientId {
-            player_uuid: req.player_uuid.clone(),
-        };
-
-        let state = McPlayerState {
-            client_id,
-            nickname: req.nickname.clone(),
-            planet_id: req.planet_id.clone(),
-            world: req.world.clone(),
-            last_fps: req.client_fps,
-            last_seen_ms: Self::current_timestamp_ms(),
-            last_tuning: tuning.clone(),
-        };
-
-        self.mc_players
-            .insert(req.player_uuid.clone(), state.clone());
-
-        Ok(state)
-    }
-
-    /// Register or update a Minecraft server (vortex-style).
-    pub fn register_mc_server(
-        &mut self,
-        req: &McServerRegistrationRequest,
-    ) -> McServerRecord {
-        let record = McServerRecord {
-            server_id: req.server_id.clone(),
-            label: req.label.clone(),
-            kind: req.kind.clone(),
-            host: req.host.clone(),
-            port: req.port,
-            metadata: req.metadata.clone(),
-            last_seen_ms: Self::current_timestamp_ms(),
-        };
-
-        self.mc_servers
-            .insert(req.server_id.clone(), record.clone());
-
-        record
-    }
-}
-
-/// Default Ω planets with φ exponents for fall and fly.
-pub fn default_planets() -> Vec<PlanetSpec> {
-    vec![
-        PlanetSpec {
-            id: "earth".to_string(),
-            name: "Earth".to_string(),
-            shell_world: "earth_shell".to_string(),
-            core_world: "earth_core".to_string(),
-            phi_power_fall: 2.0,
-            phi_power_fly: 1.0,
-        },
-        PlanetSpec {
-            id: "moon".to_string(),
-            name: "Moon".to_string(),
-            shell_world: "moon_shell".to_string(),
-            core_world: "moon_core".to_string(),
-            phi_power_fall: 1.0,
-            phi_power_fly: 0.5,
-        },
-        PlanetSpec {
-            id: "mars".to_string(),
-            name: "Mars".to_string(),
-            shell_world: "mars_shell".to_string(),
-            core_world: "mars_core".to_string(),
-            phi_power_fall: 1.5,
-            phi_power_fly: 0.8,
-        },
-        PlanetSpec {
-            id: "sun".to_string(),
-            name: "Sun".to_string(),
-            shell_world: "sun_shell".to_string(),
-            core_world: "sun_core".to_string(),
-            phi_power_fall: 3.0,
-            phi_power_fly: 2.0,
-        },
-    ]
-}
-
-/// Compute the φ^?-per-tick gravity profile for a given planet id.
-pub fn compute_phi_gravity(planet_id: &str) -> Option<PhiGravityProfile> {
-    let planets = default_planets();
-    let planet = planets.into_iter().find(|p| p.id == planet_id)?;
-    let g_fall = PHI.powf(planet.phi_power_fall);
-    let g_fly = PHI.powf(planet.phi_power_fly);
-
-    Some(PhiGravityProfile {
-        planet_id: planet.id,
-        phi_power_fall: planet.phi_power_fall,
-        phi_power_fly: planet.phi_power_fly,
-        g_fall,
-        g_fly,
-    })
-}
-
-/// Build the canonical Ω filesystem path for a (phone, label) universe file.
-///
-/// Pattern:
-/// ;phone;label;∞;∞;∞;∞;∞;∞;∞;∞;hash;
-pub fn label_universe_path(phone: &str, label: &str) -> LabelUniversePath {
-    let path = format!(
-        ";{};{};∞;∞;∞;∞;∞;∞;∞;∞;hash;",
-        phone, label
-    );
-
-    LabelUniversePath {
-        phone: phone.to_string(),
-        label: label.to_string(),
-        path,
-    }
-}
-
-/// Compute how server φ-ticks map into client frames for a given planet.
-pub fn compute_tick_tuning(
-    phi_tick_rate: f64,
-    client_fps: f64,
-    planet_id: &str,
-) -> Option<TickTuning> {
-    if client_fps <= 0.0 {
-        return None;
-    }
-
-    let profile = compute_phi_gravity(planet_id)?;
-
-    // Conceptually, how many φ-ticks do we traverse per rendered frame?
-    let ticks_per_frame = phi_tick_rate / client_fps;
-
-    let effective_delta_fall_per_frame = profile.g_fall * ticks_per_frame;
-    let effective_delta_fly_per_frame = profile.g_fly * ticks_per_frame;
-
-    Some(TickTuning {
-        planet_id: profile.planet_id.clone(),
-        client_fps,
-        server_phi_tick_rate: phi_tick_rate,
-        ticks_per_frame,
-        phi_power_fall: profile.phi_power_fall,
-        phi_power_fly: profile.phi_power_fly,
-        g_fall: profile.g_fall,
-        g_fly: profile.g_fly,
-        effective_delta_fall_per_frame,
-        effective_delta_fly_per_frame,
-    })
 }

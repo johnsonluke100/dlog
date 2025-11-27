@@ -1,10 +1,18 @@
-/target
-**/target
-**/Cargo.lock
+# Rust / Cargo
+target/
+**/*.rs.bk
 
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Mac cruft
 .DS_Store
-.idea
-.vscode
 
-**/*.log
-**/.env
+# Logs
+logs/
+*.log
+
+# Docker
+data/

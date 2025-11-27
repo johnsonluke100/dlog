@@ -1,16 +1,15 @@
-# dlog.toml
-# Basic configuration for the local node.
+[node]
+# Human-readable node name
+name = "luke-desktop"
+# API bind address (Axum server)
+bind = "127.0.0.1:8888"
 
-# Human-readable name for this node.
-node_name = "dlog-node-local"
+[phi]
+# Global phi tick rate used by the engine (Hz)
+tick_hz = 8888.0
+# Planet gravity exponent baseline (can be per-planet later)
+gravity_phi_exponent = 4
 
-# Bind address for the HTTP API.
-bind_addr = "0.0.0.0:8080"
-
-# Public URL (optional). Leave empty or comment out if not needed.
-# public_url = "https://example.com"
-
-# Conceptual phi tick rate (Ω ticks per second).
-# Think of this as "server physics heartbeat". Clients with different FPS
-# will ask /ticks/tune or /mc/register how to map this to their frames.
-phi_tick_rate = 1000.0
+[paths]
+# Logical root for the Omega engine; the launcher exports OMEGA_ROOT as well.
+omega_root = "Desktop/dlog"

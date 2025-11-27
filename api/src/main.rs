@@ -1,407 +1,115 @@
-// api/src/main.rs
-//
-// Axum HTTP server that exposes:
-// - GET  /health
-// - GET  /config
-// - GET  /snapshot
-// - GET  /balance?phone=&label=
-// - POST /transfer
-// - GET  /planets
-// - GET  /phi_gravity?id=earth
-// - GET  /ticks/tune?fps=&planet=
-// - GET  /omega/master_root
-// - GET  /omega/label_path?phone=&label=
-// - GET  /land/locks?world=
-// - POST /land/mint
-// - POST /mc/register
-// - POST /mc/server_register
-//
-// /mc/register = player ↔ φ tuning.
-// /mc/server_register = vortex-style server topology map.
-
-use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
-
 use axum::{
-    extract::{Query, State},
+    extract::State,
     routing::{get, post},
     Json, Router,
 };
-use corelib::{
-    compute_phi_gravity, compute_tick_tuning, default_planets, label_universe_path, UniverseState,
-};
+use dlog_core::init_universe;
+use dlog_corelib::{UniverseError, UniverseState};
+use dlog_spec::{Address, Amount};
 use serde::{Deserialize, Serialize};
-use spec::{
-    Balance, BalanceView, LabelId, LabelUniversePath, LandLock, McRegisterRequest,
-    McRegisterResponse, McServerRegistrationRequest, McServerRegistrationResponse, NodeConfig,
-    PhiGravityProfile, PlanetSpec, TickTuning, TransferTx, UniverseSnapshot,
+use std::{
+    net::SocketAddr,
+    sync::{Arc, Mutex},
 };
+use tracing_subscriber::EnvFilter;
 
 #[derive(Clone)]
 struct AppState {
     universe: Arc<Mutex<UniverseState>>,
-    config: NodeConfig,
 }
 
-#[derive(Debug, Deserialize)]
-struct BalanceQuery {
-    phone: String,
-    label: String,
+#[derive(Serialize)]
+struct HealthResponse {
+    status: &'static str,
 }
 
-#[derive(Debug, Deserialize)]
-struct PlanetQuery {
-    id: String,
+#[derive(Serialize)]
+struct HeightResponse {
+    height: u64,
 }
 
-#[derive(Debug, Deserialize)]
-struct LandListQuery {
-    /// Optional world filter, e.g. "earth_shell"
-    world: Option<String>,
+#[derive(Deserialize)]
+struct TransferRequest {
+    from_phone: String,
+    from_label: String,
+    to_phone: String,
+    to_label: String,
+    amount_dlog: u128,
 }
 
-#[derive(Debug, Deserialize)]
-struct LandMintRequest {
-    pub owner_phone: String,
-    pub world: String,
-    pub tier: String,
-    pub x: i64,
-    pub z: i64,
-    pub size: i32,
-    pub zillow_estimate_amount: u128,
-}
-
-#[derive(Debug, Deserialize)]
-struct TickTuneQuery {
-    /// Client frames per second (e.g. 60, 144, 1000).
-    fps: f64,
-    /// Planet id, e.g. "earth", "moon".
-    planet: String,
-}
-
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct TransferResponse {
     ok: bool,
     error: Option<String>,
-    from_balance: Option<Balance>,
-    to_balance: Option<Balance>,
-}
-
-#[derive(Debug, Serialize)]
-struct PhiGravityResponse {
-    ok: bool,
-    error: Option<String>,
-    profile: Option<PhiGravityProfile>,
-}
-
-#[derive(Debug, Serialize)]
-struct LandMintResponse {
-    ok: bool,
-    error: Option<String>,
-    lock: Option<LandLock>,
-}
-
-#[derive(Debug, Serialize)]
-struct LandListResponse {
-    locks: Vec<LandLock>,
-}
-
-#[derive(Debug, Serialize)]
-struct TickTuneResponse {
-    ok: bool,
-    error: Option<String>,
-    tuning: Option<TickTuning>,
 }
 
 #[tokio::main]
 async fn main() {
-    let config = load_config();
+    // Logging / tracing
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env().add_directive("dlog_api=info".parse().unwrap()))
+        .init();
 
-    println!("api: starting node '{}'", config.node_name);
-    println!("api: bind_addr = {}", config.bind_addr);
-    if let Some(url) = &config.public_url {
-        println!("api: public_url = {}", url);
-    }
+    // For now just bind to 127.0.0.1:8888; same as dlog.toml.
+    let addr: SocketAddr = "127.0.0.1:8888".parse().expect("valid socket addr");
 
-    let bind_addr: SocketAddr = config
-        .bind_addr
-        .parse()
-        .unwrap_or_else(|_| "0.0.0.0:8080".parse().unwrap());
-
-    let mut universe = UniverseState::new();
-    // Seed a tiny test balance so you can play with transfer immediately.
-    let genesis_label = LabelId {
-        phone: "TEST".to_string(),
-        label: "genesis".to_string(),
-    };
-    universe.set_balance(
-        genesis_label.clone(),
-        Balance {
-            amount: 1_000_000,
-        },
-    );
-    println!(
-        "api: seeded label TEST/genesis with 1_000_000 units for testing transfers."
-    );
-
+    let universe = init_universe();
     let state = AppState {
         universe: Arc::new(Mutex::new(universe)),
-        config: config.clone(),
     };
 
     let app = Router::new()
         .route("/health", get(health))
-        .route("/config", get(config_handler))
-        .route("/snapshot", get(snapshot))
-        .route("/balance", get(balance))
+        .route("/height", get(height))
         .route("/transfer", post(transfer))
-        .route("/planets", get(planets))
-        .route("/phi_gravity", get(phi_gravity))
-        .route("/ticks/tune", get(ticks_tune))
-        .route("/omega/master_root", get(omega_master_root))
-        .route("/omega/label_path", get(omega_label_path))
-        .route("/land/locks", get(land_locks))
-        .route("/land/mint", post(land_mint))
-        .route("/mc/register", post(mc_register))
-        .route("/mc/server_register", post(mc_server_register))
         .with_state(state);
 
-    println!("api: listening on http://{bind_addr}");
-    axum::Server::bind(&bind_addr)
+    tracing::info!("dlog-api listening on http://{addr}");
+    axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
-        .expect("server failed");
+        .expect("server to run");
 }
 
-fn load_config() -> NodeConfig {
-    let path = "dlog.toml";
-    match std::fs::read_to_string(path) {
-        Ok(contents) => match toml::from_str::<NodeConfig>(&contents) {
-            Ok(cfg) => cfg,
-            Err(e) => {
-                eprintln!("api: failed to parse {}: {e}", path);
-                NodeConfig::default()
-            }
-        },
-        Err(_) => {
-            eprintln!("api: no {}, using default config", path);
-            NodeConfig::default()
-        }
-    }
+async fn health() -> Json<HealthResponse> {
+    Json(HealthResponse { status: "ok" })
 }
 
-async fn health() -> &'static str {
-    "ok"
-}
-
-async fn config_handler(State(state): State<AppState>) -> Json<NodeConfig> {
-    Json(state.config.clone())
-}
-
-async fn snapshot(State(state): State<AppState>) -> Json<UniverseSnapshot> {
-    let mut guard = state.universe.lock().expect("universe lock poisoned");
-    let snapshot = guard.fold_snapshot();
-    Json(snapshot)
-}
-
-async fn balance(
-    State(state): State<AppState>,
-    Query(q): Query<BalanceQuery>,
-) -> Json<BalanceView> {
-    let guard = state.universe.lock().expect("universe lock poisoned");
-    let label = LabelId {
-        phone: q.phone,
-        label: q.label,
-    };
-    let balance = guard.balance_of(&label);
-    Json(BalanceView { label, balance })
+async fn height(State(state): State<AppState>) -> Json<HeightResponse> {
+    let universe = state.universe.lock().expect("universe lock poisoned");
+    Json(HeightResponse {
+        height: universe.height,
+    })
 }
 
 async fn transfer(
     State(state): State<AppState>,
-    Json(tx): Json<TransferTx>,
+    Json(req): Json<TransferRequest>,
 ) -> Json<TransferResponse> {
-    let mut guard = state.universe.lock().expect("universe lock poisoned");
+    let mut universe = state.universe.lock().expect("universe lock poisoned");
 
-    let from_before = guard.balance_of(&tx.from);
-    let to_before = guard.balance_of(&tx.to);
+    let from = Address {
+        phone: req.from_phone,
+        label: req.from_label,
+    };
+    let to = Address {
+        phone: req.to_phone,
+        label: req.to_label,
+    };
+    let amount = Amount::new(req.amount_dlog);
 
-    let result = guard.apply_transfer(&tx);
+    let result = universe.transfer(&from, &to, amount);
 
-    match result {
-        Ok(()) => {
-            let from_after = guard.balance_of(&tx.from);
-            let to_after = guard.balance_of(&tx.to);
-            Json(TransferResponse {
-                ok: true,
-                error: None,
-                from_balance: Some(from_after),
-                to_balance: Some(to_after),
-            })
-        }
-        Err(e) => Json(TransferResponse {
-            ok: false,
-            error: Some(e.to_string()),
-            from_balance: Some(from_before),
-            to_balance: Some(to_before),
-        }),
-    }
-}
-
-async fn planets() -> Json<Vec<PlanetSpec>> {
-    let list = default_planets();
-    Json(list)
-}
-
-async fn phi_gravity(Query(q): Query<PlanetQuery>) -> Json<PhiGravityResponse> {
-    let profile = compute_phi_gravity(&q.id);
-    match profile {
-        Some(p) => Json(PhiGravityResponse {
-            ok: true,
-            error: None,
-            profile: Some(p),
-        }),
-        None => Json(PhiGravityResponse {
-            ok: false,
-            error: Some(format!("unknown planet id '{}'", q.id)),
-            profile: None,
-        }),
-    }
-}
-
-/// FPS-aware φ tick tuning:
-/// GET /ticks/tune?fps=&planet=
-async fn ticks_tune(
-    State(state): State<AppState>,
-    Query(q): Query<TickTuneQuery>,
-) -> Json<TickTuneResponse> {
-    if q.fps <= 0.0 {
-        return Json(TickTuneResponse {
-            ok: false,
-            error: Some("fps must be > 0".to_string()),
-            tuning: None,
-        });
-    }
-
-    let phi_rate = state.config.phi_tick_rate;
-    let tuning = compute_tick_tuning(phi_rate, q.fps, &q.planet);
-
-    match tuning {
-        Some(t) => Json(TickTuneResponse {
-            ok: true,
-            error: None,
-            tuning: Some(t),
-        }),
-        None => Json(TickTuneResponse {
-            ok: false,
-            error: Some(format!("unknown planet id '{}'", q.planet)),
-            tuning: None,
-        }),
-    }
-}
-
-/// 9∞ master root-style endpoint.
-async fn omega_master_root(
-    State(state): State<AppState>,
-) -> Json<UniverseSnapshot> {
-    let mut guard = state.universe.lock().expect("universe lock poisoned");
-    let snapshot = guard.fold_snapshot();
-    Json(snapshot)
-}
-
-/// Ω label universe path endpoint:
-/// GET /omega/label_path?phone=&label=
-async fn omega_label_path(Query(q): Query<BalanceQuery>) -> Json<LabelUniversePath> {
-    let view = label_universe_path(&q.phone, &q.label);
-    Json(view)
-}
-
-/// List land locks, optionally filtered by world.
-async fn land_locks(
-    State(state): State<AppState>,
-    Query(q): Query<LandListQuery>,
-) -> Json<LandListResponse> {
-    let guard = state.universe.lock().expect("universe lock poisoned");
-    let world_filter = q.world.as_deref();
-    let locks = guard.locks_by_world(world_filter);
-    Json(LandListResponse { locks })
-}
-
-/// Mint a new land lock into the universe.
-async fn land_mint(
-    State(state): State<AppState>,
-    Json(req): Json<LandMintRequest>,
-) -> Json<LandMintResponse> {
-    let mut guard = state.universe.lock().expect("universe lock poisoned");
-
-    let lock = LandLock {
-        id: String::new(),
-        owner_phone: req.owner_phone,
-        world: req.world,
-        tier: req.tier,
-        x: req.x,
-        z: req.z,
-        size: req.size,
-        zillow_estimate_amount: req.zillow_estimate_amount,
+    let (ok, error) = match result {
+        Ok(()) => (true, None),
+        Err(e) => (
+            false,
+            Some(match e {
+                UniverseError::InsufficientBalance => "insufficient_balance".to_string(),
+                UniverseError::UnknownAccount => "unknown_account".to_string(),
+            }),
+        ),
     };
 
-    let minted = guard.mint_lock(lock);
-    Json(LandMintResponse {
-        ok: true,
-        error: None,
-        lock: Some(minted),
-    })
-}
-
-/// POST /mc/register
-///
-/// Body:
-/// {
-///   "player_uuid": "some-uuid",
-///   "nickname": "LukeSkywalker",
-///   "planet_id": "earth",
-///   "world": "world",
-///   "client_fps": 144.0
-/// }
-async fn mc_register(
-    State(state): State<AppState>,
-    Json(req): Json<McRegisterRequest>,
-) -> Json<McRegisterResponse> {
-    let mut guard = state.universe.lock().expect("universe lock poisoned");
-    match guard.register_mc_player(&state.config, &req) {
-        Ok(player_state) => Json(McRegisterResponse {
-            ok: true,
-            error: None,
-            tuning: Some(player_state.last_tuning),
-        }),
-        Err(e) => Json(McRegisterResponse {
-            ok: false,
-            error: Some(e.to_string()),
-            tuning: None,
-        }),
-    }
-}
-
-/// POST /mc/server_register
-///
-/// Body:
-/// {
-///   "server_id": "velocity-main",
-///   "label": "vortex-velocity",
-///   "kind": "Velocity",
-///   "host": "127.0.0.1",
-///   "port": 25577,
-///   "metadata": "{\"plugins\":[\"Geyser\",\"Floodgate\",\"ViaVersion\"]}"
-/// }
-async fn mc_server_register(
-    State(state): State<AppState>,
-    Json(req): Json<McServerRegistrationRequest>,
-) -> Json<McServerRegistrationResponse> {
-    let mut guard = state.universe.lock().expect("universe lock poisoned");
-    let record = guard.register_mc_server(&req);
-    Json(McServerRegistrationResponse {
-        ok: true,
-        error: None,
-        server: Some(record),
-    })
+    Json(TransferResponse { ok, error })
 }
