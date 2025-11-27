@@ -3,12 +3,24 @@ version: "3.9"
 services:
   dlog-api:
     build: .
-    image: dlog-api:latest
+    container_name: dlog-api
     restart: unless-stopped
-    ports:
-      - "8888:8888"
+
     environment:
-      - RUST_LOG=info
-      - OMEGA_ROOT=/data
-    volumes:
-      - ./data:/data
+      # Ω runtime mode for container.
+      - DLOG_RUNTIME_MODE=container_supabase
+      # Bind inside the container; compose will map to host ports.
+      - DLOG_BIND=0.0.0.0
+      - DLOG_PORT=8888
+
+      # Optional Supabase wiring – set from your shell when you go live.
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+
+    ports:
+      # host:container
+      - "8888:8888"
+
+    # When you later add volumes (configs, logs), mount them here.
+    # volumes:
+    #   - ./dlog.toml:/app/dlog.toml:ro

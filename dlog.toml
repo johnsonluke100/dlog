@@ -1,15 +1,25 @@
-[node]
-# Human-readable node name
-name = "luke-desktop"
-# API bind address (Axum server)
-bind = "127.0.0.1:8888"
+# dlog.toml – Ω node config for this machine
+
+[name]
+# Human-friendly node name; purely cosmetic.
+node_name = "luke-desktop-testing"
+
+[network]
+# Bind + port must match DLOG_BIND / DLOG_PORT env unless you override in code.
+bind = "127.0.0.1"
+port = 8888
 
 [phi]
-# Global phi tick rate used by the engine (Hz)
-tick_hz = 8888.0
-# Planet gravity exponent baseline (can be per-planet later)
-gravity_phi_exponent = 4
+# Canonical Ω tick rate; server is allowed to skip/sparsify ticks for clients.
+tick_hz = 1000.0
+# Canonical numeric base for this universe.
+base = 8
 
-[paths]
-# Logical root for the Omega engine; the launcher exports OMEGA_ROOT as well.
-omega_root = "Desktop/dlog"
+[hosting]
+# testing_local  → your Mac
+# container_supabase → Docker/Compose in the cloud
+# supabase_cloud → fully managed Supabase deployment
+mode = "testing_local"
+
+# Optional hint; code treats empty as "no external host yet".
+supabase_url = ""
