@@ -669,13 +669,52 @@ struct CanonSpecV1 {
     spiral: String,
 }
 
+/* ========= Omega Keys / VORTEX / COMET / Tithe ========= */
+
+#[derive(Debug, Serialize)]
+struct OmegaKeysSpec {
+    label_as_root_description: String,
+    key_generation: String,
+    storage: String,
+    biometrics_required: bool,
+    backend_sees_private_keys: bool,
+    sms_as_primary: bool,
+    notes: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct RootWalletDescriptor {
+    id: String,
+    kind: String, // "VORTEX" or "COMET"
+    role: String,
+    backing: String,
+    phi_scale_index: i32,
+    public_link_hint: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct RootWalletsSpec {
+    total_genesis_wallets: u32,
+    root_wallets: Vec<RootWalletDescriptor>,
+    notes: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct TitheSpec {
+    tithe_percent: f64,
+    tithe_percent_bps_octal: String,
+    miner_net_inflation_apy_hint: f64,
+    destinations: Vec<String>,
+    notes: Vec<String>,
+}
+
 /* ========= Handlers ========= */
 
 async fn root() -> Json<RootResponse> {
     let mode = env::var("DLOG_RUNTIME_MODE").unwrap_or_else(|_| "testing_local".into());
     Json(RootResponse {
         service: "dlog-api".into(),
-        version: "0.2.4".into(),
+        version: "0.2.5".into(),
         message: "Ω heartbeat online; solar rail aligned; base-8 canon engaged; Rust-only spine; fearless spiral rolling."
             .into(),
         mode_hint: mode,
@@ -820,18 +859,18 @@ async fn get_land_auction_rules(
     })
 }
 
-#[derive(Debug, Serialize)]
-struct LandAdjacencyExample {
-    description: String,
-    valid: bool,
-}
-
 async fn example_land_adjacency() -> Json<LandAdjacencyExample> {
     Json(LandAdjacencyExample {
         description: "T-shaped / plus-shaped clusters are valid; isolated single-pixel islands are rejected."
             .into(),
         valid: true,
     })
+}
+
+#[derive(Debug, Serialize)]
+struct LandAdjacencyExample {
+    description: String,
+    valid: bool,
 }
 
 /* ---- Flight ---- */
@@ -1258,6 +1297,146 @@ async fn get_canon_spec_v1() -> Json<CanonSpecV1> {
     })
 }
 
+/* ---- Omega Keys / VORTEX / COMET / Tithe ---- */
+
+async fn get_omega_keys_spec() -> Json<OmegaKeysSpec> {
+    Json(OmegaKeysSpec {
+        label_as_root_description:
+            "Each card/label is its own Omega root – a conceptual private key anchoring its own mini-universe."
+                .into(),
+        key_generation:
+            "Keys are generated client-side at wallet/label creation; there is no central key factory."
+                .into(),
+        storage:
+            "Keys live in secure platform keystores (iCloud Keychain, Android Keystore, etc.) behind biometrics."
+                .into(),
+        biometrics_required: true,
+        backend_sees_private_keys: false,
+        sms_as_primary: false,
+        notes: vec![
+            "Labels: savings, fun, tips, business, land_overworld_0_0, gift123, comet, etc."
+                .into(),
+            "On-chain, labels are just pseudonymous accounts; off-chain, bound to phone + Apple/Google identity."
+                .into(),
+            "DLOG never uses SMS alone as a primary factor for critical actions; SMS is auxiliary only."
+                .into(),
+        ],
+    })
+}
+
+async fn get_root_wallets_spec() -> Json<RootWalletsSpec> {
+    let root_wallets = vec![
+        RootWalletDescriptor {
+            id: "V1".into(),
+            kind: "VORTEX".into(),
+            role: "Primary DLOG backing well (phi stack – layer 1).".into(),
+            backing: "Pure DLOG backing".into(),
+            phi_scale_index: 1,
+            public_link_hint: Some("https://dloG.com/vortex/".into()),
+        },
+        RootWalletDescriptor {
+            id: "V2".into(),
+            kind: "VORTEX".into(),
+            role: "Secondary DLOG backing well (phi stack – layer 2).".into(),
+            backing: "Pure DLOG backing".into(),
+            phi_scale_index: 2,
+            public_link_hint: Some("https://dloG.com/vortex/".into()),
+        },
+        RootWalletDescriptor {
+            id: "V3".into(),
+            kind: "VORTEX".into(),
+            role: "Tertiary DLOG backing well (phi stack – layer 3).".into(),
+            backing: "Pure DLOG backing".into(),
+            phi_scale_index: 3,
+            public_link_hint: Some("https://dloG.com/vortex/".into()),
+        },
+        RootWalletDescriptor {
+            id: "V4".into(),
+            kind: "VORTEX".into(),
+            role: "Quaternary DLOG backing well (phi stack – layer 4).".into(),
+            backing: "Pure DLOG backing".into(),
+            phi_scale_index: 4,
+            public_link_hint: Some("https://dloG.com/vortex/".into()),
+        },
+        RootWalletDescriptor {
+            id: "V5".into(),
+            kind: "VORTEX".into(),
+            role: "Auto-conversion channel into BTC backing.".into(),
+            backing: "BTC backing (via conversion streams)".into(),
+            phi_scale_index: 5,
+            public_link_hint: Some("https://dloG.com/vortex/".into()),
+        },
+        RootWalletDescriptor {
+            id: "V6".into(),
+            kind: "VORTEX".into(),
+            role: "Auto-conversion channel into ETH backing.".into(),
+            backing: "ETH backing (via conversion streams)".into(),
+            phi_scale_index: 6,
+            public_link_hint: Some("https://dloG.com/vortex/".into()),
+        },
+        RootWalletDescriptor {
+            id: "V7".into(),
+            kind: "VORTEX".into(),
+            role: "Auto-conversion channel into DOGE backing.".into(),
+            backing: "DOGE backing (via conversion streams)".into(),
+            phi_scale_index: 7,
+            public_link_hint: Some("https://dloG.com/vortex/".into()),
+        },
+        RootWalletDescriptor {
+            id: "COMET".into(),
+            kind: "COMET".into(),
+            role: "Luke’s hot, public-facing gifting + operations wallet; first in line for tithe refills until its phi target is met."
+                .into(),
+            backing: "Live ops, gifting, and payout flows.".into(),
+            phi_scale_index: 0,
+            public_link_hint: Some(
+                "https://dloG.com/9132077554/comet/receive/".into(),
+            ),
+        },
+    ];
+
+    Json(RootWalletsSpec {
+        total_genesis_wallets: 88_248,
+        root_wallets,
+        notes: vec![
+            "Top 8 genesis wallets = 7×VORTEX wells + 1×COMET wallet.".into(),
+            "VORTEX wells never attach to Apple/Google accounts; they only move via tithe/rotation logic."
+                .into(),
+            "COMET is bound to Luke’s phone identity; keys can rotate frequently under a stable public link."
+                .into(),
+            "Overflow above COMET’s φ target trickles down the VORTEX stack to deepen backing."
+                .into(),
+        ],
+    })
+}
+
+async fn get_tithe_spec() -> Json<TitheSpec> {
+    let tithe_percent = 0.0024_f64; // 0.24%
+    let tithe_bps = (tithe_percent * 10_000.0).round() as u64; // ~24 bps
+    let tithe_bps_octal = to_octal_u64(tithe_bps);
+
+    Json(TitheSpec {
+        tithe_percent,
+        tithe_percent_bps_octal: tithe_bps_octal,
+        miner_net_inflation_apy_hint: 0.088_248_f64,
+        destinations: vec![
+            "VORTEX V1–V4 (pure DLOG backing)".into(),
+            "VORTEX V5 (BTC backing channel)".into(),
+            "VORTEX V6 (ETH backing channel)".into(),
+            "VORTEX V7 (DOGE backing channel)".into(),
+            "COMET (Luke’s gifting + ops wallet)".into(),
+        ],
+        notes: vec![
+            "All miners contribute a small tithe (~0.24% of mined rewards) into VORTEX + COMET."
+                .into(),
+            "Base miner inflation is slightly higher so miners still net ~8.8248% APY after tithe."
+                .into(),
+            "Tithe funds cover hosting, backing conversions (BTC/ETH/DOGE), and the \"gravity\" of the system."
+                .into(),
+        ],
+    })
+}
+
 /* ========= Bootstrap ========= */
 
 #[tokio::main]
@@ -1307,6 +1486,9 @@ async fn main() {
         .route("/vibe/anthem", get(get_vibe_anthem))
         .route("/security/fearless", get(get_security_fearless))
         .route("/canon/v1", get(get_canon_spec_v1))
+        .route("/omega/keys", get(get_omega_keys_spec))
+        .route("/omega/root_wallets", get(get_root_wallets_spec))
+        .route("/omega/tithe", get(get_tithe_spec))
         .with_state(state)
         // Very loose CORS for local dev; lock this down later.
         .layer(CorsLayer::very_permissive());
