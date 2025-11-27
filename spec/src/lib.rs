@@ -1,7 +1,14 @@
 //! Shared types and constants for the DLOG / Ω universe.
 //!
-//! This also carries the "descriptor" side for sky / slideshow state,
-//! while the heavy lifting is done in the `dlog-sky` crate.
+//! This file now carries:
+//! - Money: MonetaryPolicy (miner inflation + holder interest)
+//! - Identity: Address, RootWalletKind, LabelKind
+//! - Planets: PlanetId
+//! - Universe config: UniverseConfig, UniverseSnapshot
+//! - Sky: SkySlideRef, SkyShowConfig
+//! - Omega FS: OmegaMasterRoot / LabelUniverseKey / OmegaFilesystemSnapshot
+//! - Airdrop & devices: GiftRules, DeviceLimitsRules
+//! - Land: LandTier, LandLock, AccessRole, AccessGrant
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -145,5 +152,245 @@ impl SkyShowConfig {
             name: "default_eight".to_string(),
             slides,
         }
+    }
+}
+
+//////////////////////////////////////////
+// Money / roots (VORTEX, COMET)
+//////////////////////////////////////////
+
+/// Luke's special root wallets:
+/// - Vortex(1..=7)
+/// - Comet
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum RootWalletKind {
+    Vortex(u8),
+    Comet,
+}
+
+/// What kind of label is this? giftN, comet, vortex, or normal.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum LabelKind {
+    Normal,
+    Gift(u32),
+    Comet,
+    Vortex,
+}
+
+/// Monetary policy: miner inflation + holder interest.
+/// Canon: ~8.8248% miner, 61.8% holder.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MonetaryPolicy {
+    /// Miner inflation APY, e.g. 0.088248 ≈ 8.8248%
+    pub miner_inflation_apy: f64,
+    /// Holder interest APY, e.g. 0.618 ≈ 61.8%
+    pub holder_interest_apy: f64,
+}
+
+impl Default for MonetaryPolicy {
+    fn default() -> Self {
+        Self {
+            miner_inflation_apy: 0.088_248,
+            holder_interest_apy: 0.618,
+        }
+    }
+}
+
+impl MonetaryPolicy {
+    /// Approximate total APY (miner + holder).
+    pub fn total_apy(&self) -> f64 {
+        self.miner_inflation_apy + self.holder_interest_apy
+    }
+}
+
+//////////////////////////////////////////
+// Ω Filesystem / 9∞ master root
+//////////////////////////////////////////
+
+/// Per-label universe identifier: (phone, label).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct LabelUniverseKey {
+    pub phone: String,
+    pub label: String,
+}
+
+impl LabelUniverseKey {
+    /// Build the Omega filesystem path:
+    /// ;phone;label;∞;∞;∞;∞;∞;∞;∞;∞;hash;
+    pub fn path(&self) -> String {
+        format!(
+            ";{};{};∞;∞;∞;∞;∞;∞;∞;∞;hash;",
+            self.phone, self.label
+        )
+    }
+}
+
+/// 9∞ master root, stored as a single scalar string; we don't interpret the 9 segments yet.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OmegaMasterRoot {
+    /// Canonically: `;∞;∞;∞;∞;∞;∞;∞;∞;∞;`-folded scalar.
+    pub scalar: String,
+}
+
+/// One label's universe hash entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabelUniverseHash {
+    pub key: LabelUniverseKey,
+    pub hash: String,
+}
+
+/// Snapshot of the Omega filesystem at a given block:
+/// - one 9∞ master root
+/// - per-label hashes / paths
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OmegaFilesystemSnapshot {
+    pub master_root: OmegaMasterRoot,
+    pub label_hashes: Vec<LabelUniverseHash>,
+}
+
+//////////////////////////////////////////
+// Airdrop: giftN rules (phi spiral)
+//////////////////////////////////////////
+
+/// Rules for giftN airdrop labels.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GiftRules {
+    /// Number of full days after claim before any sends are allowed (Day 0..lock_days-1 → 0).
+    pub lock_days: u32,
+    /// Base cap on the first unlocked day (DLOG).
+    pub base_daily_cap: u64,
+    /// Growth base; canon is φ.
+    pub phi_growth: f64,
+}
+
+impl Default for GiftRules {
+    fn default() -> Self {
+        // Canon:
+        // Day 0–17 → 0 (18 days locked)
+        // Day 18 (d=0) → 100 DLOG
+        // Day 19 (d=1) → 100 * φ
+        // Day 20 (d=2) → 100 * φ²
+        Self {
+            lock_days: 18,
+            base_daily_cap: 100,
+            phi_growth: PHI,
+        }
+    }
+}
+
+impl GiftRules {
+    /// Daily cap based on days since claim.
+    pub fn daily_cap(&self, days_since_claim: u32) -> u64 {
+        if days_since_claim < self.lock_days {
+            return 0;
+        }
+        let d = (days_since_claim - self.lock_days) as f64;
+        let cap = (self.base_daily_cap as f64) * self.phi_growth.powf(d);
+        cap.round() as u64
+    }
+}
+
+//////////////////////////////////////////
+// Device-level outflow limits (phi)
+//////////////////////////////////////////
+
+/// Rules for per-device send limits.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceLimitsRules {
+    /// Days from enrollment where we use a small fixed cap (0..initial_days-1).
+    pub initial_days: u32,
+    /// Daily cap during the initial period.
+    pub initial_daily_cap: u64,
+    /// Base cap when the phi spiral starts.
+    pub base_cap_after: u64,
+    /// Growth base; canon is φ.
+    pub phi_growth: f64,
+}
+
+impl Default for DeviceLimitsRules {
+    fn default() -> Self {
+        // Canon idea:
+        // - Days 1–7: 100 DLOG/day
+        // - Day 8 onward: 10,000 * φ^(d) where d = days_since_enroll - initial_days
+        Self {
+            initial_days: 7,
+            initial_daily_cap: 100,
+            base_cap_after: 10_000,
+            phi_growth: PHI,
+        }
+    }
+}
+
+impl DeviceLimitsRules {
+    /// Daily cap based on days since the device first joined.
+    pub fn daily_cap(&self, days_since_enroll: u32) -> u64 {
+        if days_since_enroll < self.initial_days {
+            return self.initial_daily_cap;
+        }
+        let d = (days_since_enroll - self.initial_days) as f64;
+        let cap = (self.base_cap_after as f64) * self.phi_growth.powf(d);
+        cap.round() as u64
+    }
+}
+
+//////////////////////////////////////////
+// Landlocks, access, Zillow estimate
+//////////////////////////////////////////
+
+/// Land tier: iron → gold → diamond → emerald.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum LandTier {
+    Iron,
+    Gold,
+    Diamond,
+    Emerald,
+}
+
+/// Access role inside a lock.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AccessRole {
+    Admin,
+    Builder,
+    Guest,
+}
+
+/// One permission entry for a player.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccessGrant {
+    pub player_id: String,
+    pub role: AccessRole,
+}
+
+/// Landlock NFT data (shell or core).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LandLock {
+    /// Simple numeric ID for now.
+    pub id: u64,
+    /// Phone-number-level owner.
+    pub owner_phone: String,
+    /// World (planet + shell/core).
+    pub world: PlanetId,
+    /// Tier (iron/gold/diamond/emerald).
+    pub tier: LandTier,
+    /// Grid origin (x,z) for the lock footprint.
+    pub x: i32,
+    pub z: i32,
+    /// Size in blocks for one side of the square footprint (e.g. 16 -> 16x16).
+    pub size: u32,
+    /// When this lock was minted.
+    pub created_at_block: BlockHeight,
+    /// Last block where the owner (or allowed players) visited.
+    pub last_visited_block: BlockHeight,
+    /// Zillow-style estimate of value in DLOG.
+    pub zillow_estimate_dlog: u128,
+    /// Access control list.
+    pub shared_with: Vec<AccessGrant>,
+    /// Whether this lock is currently in auto-auction.
+    pub in_auction: bool,
+}
+
+impl LandLock {
+    pub fn zillow_estimate(&self) -> u128 {
+        self.zillow_estimate_dlog
     }
 }

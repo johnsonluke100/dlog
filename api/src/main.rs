@@ -1,11 +1,14 @@
 use axum::{
-    extract::State,
+    extract::{Query, State},
     routing::{get, post},
     Json, Router,
 };
 use dlog_core::init_universe;
 use dlog_corelib::{UniverseError, UniverseState};
-use dlog_spec::{Address, Amount};
+use dlog_spec::{
+    AccessGrant, AccessRole, Address, Amount, DeviceLimitsRules, GiftRules, LandLock, LandTier,
+    MonetaryPolicy, PlanetId,
+};
 use dlog_sky::SkyTimeline;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -54,6 +57,47 @@ struct SkyCurrentResponse {
     duration_ticks: u64,
 }
 
+#[derive(Serialize)]
+struct MoneyPolicyResponse {
+    policy: MonetaryPolicy,
+    approx_total_apy: f64,
+}
+
+#[derive(Serialize)]
+struct GiftRulesResponse {
+    rules: GiftRules,
+    /// Example caps for a few reference days.
+    examples: Vec<GiftCapExample>,
+}
+
+#[derive(Serialize)]
+struct GiftCapExample {
+    days_since_claim: u32,
+    daily_cap_dlog: u64,
+}
+
+#[derive(Deserialize)]
+struct GiftCapQuery {
+    days_since_claim: u32,
+}
+
+#[derive(Serialize)]
+struct GiftCapResponse {
+    days_since_claim: u32,
+    daily_cap_dlog: u64,
+}
+
+#[derive(Deserialize)]
+struct DeviceCapQuery {
+    days_since_enroll: u32,
+}
+
+#[derive(Serialize)]
+struct DeviceCapResponse {
+    days_since_enroll: u32,
+    daily_cap_dlog: u64,
+}
+
 #[tokio::main]
 async fn main() {
     // Logging / tracing
@@ -78,6 +122,11 @@ async fn main() {
         .route("/height", get(height))
         .route("/transfer", post(transfer))
         .route("/sky/current", get(sky_current))
+        .route("/policy/money", get(money_policy))
+        .route("/airdrop/gift/rules", get(gift_rules))
+        .route("/airdrop/gift/daily_cap", get(gift_daily_cap))
+        .route("/device/daily_cap", get(device_daily_cap))
+        .route("/land/example_lock", get(land_example_lock))
         .with_state(state);
 
     tracing::info!("dlog-api listening on http://{addr} (phi_tick_hz={tick_hz})");
@@ -153,4 +202,73 @@ async fn sky_current(State(state): State<AppState>) -> Json<SkyCurrentResponse> 
         path: slide.path,
         duration_ticks: slide.duration_ticks,
     })
+}
+
+async fn money_policy() -> Json<MoneyPolicyResponse> {
+    let policy = MonetaryPolicy::default();
+    Json(MoneyPolicyResponse {
+        approx_total_apy: policy.total_apy(),
+        policy,
+    })
+}
+
+async fn gift_rules() -> Json<GiftRulesResponse> {
+    let rules = GiftRules::default();
+    let examples = vec![
+        0_u32,
+        1,
+        17,
+        18,
+        19,
+        20,
+        30,
+    ]
+    .into_iter()
+    .map(|d| GiftCapExample {
+        days_since_claim: d,
+        daily_cap_dlog: rules.daily_cap(d),
+    })
+    .collect();
+
+    Json(GiftRulesResponse { rules, examples })
+}
+
+async fn gift_daily_cap(Query(q): Query<GiftCapQuery>) -> Json<GiftCapResponse> {
+    let rules = GiftRules::default();
+    let cap = rules.daily_cap(q.days_since_claim);
+    Json(GiftCapResponse {
+        days_since_claim: q.days_since_claim,
+        daily_cap_dlog: cap,
+    })
+}
+
+async fn device_daily_cap(Query(q): Query<DeviceCapQuery>) -> Json<DeviceCapResponse> {
+    let rules = DeviceLimitsRules::default();
+    let cap = rules.daily_cap(q.days_since_enroll);
+    Json(DeviceCapResponse {
+        days_since_enroll: q.days_since_enroll,
+        daily_cap_dlog: cap,
+    })
+}
+
+async fn land_example_lock() -> Json<LandLock> {
+    // Simple hard-coded example of an Emerald lock on EarthShell at (0,0), 16x16
+    let lock = LandLock {
+        id: 1,
+        owner_phone: "9132077554".to_string(),
+        world: PlanetId::EarthShell,
+        tier: LandTier::Emerald,
+        x: 0,
+        z: 0,
+        size: 16,
+        created_at_block: 0,
+        last_visited_block: 0,
+        zillow_estimate_dlog: 1_000_000,
+        shared_with: vec![AccessGrant {
+            player_id: "friend_player_id".to_string(),
+            role: AccessRole::Builder,
+        }],
+        in_auction: false,
+    };
+    Json(lock)
 }
