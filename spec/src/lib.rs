@@ -1,6 +1,10 @@
 // spec/src/lib.rs
 //
-// Shared types / models for the dlog universe.
+// Shared types / models for the dlog universe:
+// - Labels, balances, land locks
+// - Node config
+// - Planets + φ-gravity profiles
+// - Ω filesystem helpers (label universe path)
 
 use serde::{Deserialize, Serialize};
 
@@ -111,6 +115,16 @@ pub struct PhiGravityProfile {
     pub g_fall: f64,
     /// Computed φ^phi_power_fly.
     pub g_fly: f64,
+}
+
+/// LabelUniversePath encodes the Ω filesystem path for a (phone, label)
+/// universe file. It follows the pattern:
+/// ;phone;label;∞;∞;∞;∞;∞;∞;∞;∞;hash;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabelUniversePath {
+    pub phone: String,
+    pub label: String,
+    pub path: String,
 }
 
 /// Errors that can occur when we apply high-level actions.

@@ -5,9 +5,11 @@
 // - GET  /config
 // - GET  /snapshot
 // - GET  /balance?phone=&label=
-// - POST /transfer        (body: TransferTx JSON)
-// - GET  /planets         (list φ-planet specs)
-// - GET  /phi_gravity?id= (φ^?-per-tick gravity profile)
+// - POST /transfer              (body: TransferTx JSON)
+// - GET  /planets               (list φ-planet specs)
+// - GET  /phi_gravity?id=earth  (φ^?-per-tick gravity profile)
+// - GET  /omega/master_root     (UniverseSnapshot, 9∞ root style)
+// - GET  /omega/label_path?phone=&label= (Ω LabelUniversePath)
 //
 // Later:
 // - add auth integration
@@ -21,11 +23,11 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use corelib::{compute_phi_gravity, default_planets, UniverseState};
+use corelib::{compute_phi_gravity, default_planets, label_universe_path, UniverseState};
 use serde::{Deserialize, Serialize};
 use spec::{
-    Balance, BalanceView, LabelId, NodeConfig, PhiGravityProfile, PlanetSpec, TransferTx,
-    UniverseSnapshot,
+    Balance, BalanceView, LabelId, LabelUniversePath, NodeConfig, PhiGravityProfile, PlanetSpec,
+    TransferTx, UniverseSnapshot,
 };
 
 #[derive(Clone)]
@@ -105,6 +107,8 @@ async fn main() {
         .route("/transfer", post(transfer))
         .route("/planets", get(planets))
         .route("/phi_gravity", get(phi_gravity))
+        .route("/omega/master_root", get(omega_master_root))
+        .route("/omega/label_path", get(omega_label_path))
         .with_state(state);
 
     println!("api: listening on http://{bind_addr}");
@@ -208,4 +212,22 @@ async fn phi_gravity(Query(q): Query<PlanetQuery>) -> Json<PhiGravityResponse> {
             profile: None,
         }),
     }
+}
+
+/// 9∞ master root-style endpoint.
+/// For now this just folds a new snapshot (incrementing height) and returns it.
+async fn omega_master_root(
+    State(state): State<AppState>,
+) -> Json<UniverseSnapshot> {
+    let mut guard = state.universe.lock().expect("universe lock poisoned");
+    let snapshot = guard.fold_snapshot();
+    Json(snapshot)
+}
+
+/// Ω label universe path endpoint:
+/// GET /omega/label_path?phone=&label=
+/// → { phone, label, path: ";phone;label;∞;…;hash;" }
+async fn omega_label_path(Query(q): Query<BalanceQuery>) -> Json<LabelUniversePath> {
+    let view = label_universe_path(&q.phone, &q.label);
+    Json(view)
 }

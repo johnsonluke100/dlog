@@ -1,17 +1,19 @@
 // corelib/src/lib.rs
 //
-// Universe state machine placeholder + φ-gravity helpers.
+// Universe state machine + φ-gravity + Ω filesystem helpers.
 //
 // - In-memory maps for label balances.
 // - Simple transfer logic.
 // - Snapshot folding that increments a height counter.
 // - Planet list and φ^?-per-tick gravity profiles.
+// - LabelUniversePath constructor for Ω paths.
 
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use spec::{
-    Balance, LabelId, PhiGravityProfile, PlanetSpec, SpecError, TransferTx, UniverseSnapshot,
+    Balance, LabelId, LabelUniversePath, PhiGravityProfile, PlanetSpec, SpecError, TransferTx,
+    UniverseSnapshot,
 };
 
 /// PHI = golden ratio, used as the Ω scaling constant.
@@ -167,4 +169,21 @@ pub fn compute_phi_gravity(planet_id: &str) -> Option<PhiGravityProfile> {
         g_fall,
         g_fly,
     })
+}
+
+/// Build the canonical Ω filesystem path for a (phone, label) universe file.
+///
+/// Pattern:
+/// ;phone;label;∞;∞;∞;∞;∞;∞;∞;∞;hash;
+pub fn label_universe_path(phone: &str, label: &str) -> LabelUniversePath {
+    let path = format!(
+        ";{};{};∞;∞;∞;∞;∞;∞;∞;∞;hash;",
+        phone, label
+    );
+
+    LabelUniversePath {
+        phone: phone.to_string(),
+        label: label.to_string(),
+        path,
+    }
 }
