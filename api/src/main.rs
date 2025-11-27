@@ -39,7 +39,7 @@ struct HeightResponse {
     height: u64,
 }
 
-#[derive(serialize)]
+#[derive(Serialize)]
 struct TickOnceResponse {
     height: u64,
 }
@@ -300,6 +300,31 @@ struct WalletOverviewResponse {
     effective_send_cap_dlog: u64,
 }
 
+/// Query for /world/warp (shell/core hypercube inversion).
+#[derive(Deserialize)]
+struct WorldWarpQuery {
+    /// Planet: "earth", "moon", "mars", "sun", or explicit "*_shell"/"*_core".
+    planet: String,
+    /// From which side: "shell" or "core".
+    from: String,
+    /// Normalized coordinates near the planetary center (e.g. -1..1).
+    x: f64,
+    y: f64,
+    z: f64,
+}
+
+/// Response for /world/warp.
+#[derive(Serialize)]
+struct WorldWarpResponse {
+    planet: String,
+    from_dimension: String,
+    to_dimension: String,
+    original_coords: [f64; 3],
+    warped_coords: [f64; 3],
+    did_invert: bool,
+    reason: String,
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -370,6 +395,7 @@ async fn main() {
         .route("/clients", get(clients_manifest))
         .route("/universe/snapshot", get(universe_snapshot))
         .route("/wallet/overview", get(wallet_overview))
+        .route("/world/warp", get(world_warp))
         .with_state(state);
 
     tracing::info!(
@@ -947,5 +973,86 @@ async fn wallet_overview(
         gift_daily_cap_dlog: gift_cap,
         device_daily_cap_dlog: device_cap,
         effective_send_cap_dlog: effective_cap,
+    })
+}
+
+/// World warp: shell/core hypercube inversion around a gravitational center bubble.
+///
+/// This is the math version of:
+///   - "Every spherical body has a center bubble."
+///   - "Cross the bubble → invert between *_shell and *_core with transformed coords."
+async fn world_warp(Query(q): Query<WorldWarpQuery>) -> Json<WorldWarpResponse> {
+    let planet_norm = q.planet.to_lowercase();
+    let planet = match planet_norm.as_str() {
+        "earth" | "earth_shell" | "earth_core" => "earth",
+        "moon" | "moon_shell" | "moon_core" => "moon",
+        "mars" | "mars_shell" | "mars_core" => "mars",
+        "sun" | "sun_shell" | "sun_core" => "sun",
+        other => other,
+    }
+    .to_string();
+
+    let from_side_norm = q.from.to_lowercase();
+    let from_side = if from_side_norm == "core" { "core" } else { "shell" };
+
+    let from_dimension = format!("{}_{}", planet, from_side);
+
+    let x = q.x;
+    let y = q.y;
+    let z = q.z;
+    let original_coords = [x, y, z];
+
+    let r = (x * x + y * y + z * z).sqrt();
+    let bubble_radius = 0.15_f64; // normalized radius where inversion triggers
+    let sphere_radius = 1.0_f64;  // nominal world radius in this normalized space
+
+    let (to_dimension, warped_coords, did_invert, reason) = if r < 1.0e-6 {
+        (
+            from_dimension.clone(),
+            [x, y, z],
+            false,
+            "at exact center; inversion undefined; staying put".to_string(),
+        )
+    } else if r <= bubble_radius {
+        // Inside the gravitational bubble → invert shell ↔ core.
+        let to_side = if from_side == "shell" { "core" } else { "shell" };
+        let to_dimension = format!("{}_{}", planet, to_side);
+
+        // Simple spherical inversion: r' = R^2 / r
+        let r_prime = (sphere_radius * sphere_radius) / r;
+        let k = r_prime / r;
+        let wx = x * k;
+        let wy = y * k;
+        let wz = z * k;
+
+        (
+            to_dimension,
+            [wx, wy, wz],
+            true,
+            format!(
+                "inside bubble (r={:.4} ≤ {:.4}); hypercube inversion to {}",
+                r, bubble_radius, to_side
+            ),
+        )
+    } else {
+        (
+            from_dimension.clone(),
+            [x, y, z],
+            false,
+            format!(
+                "outside bubble (r={:.4} > {:.4}); remaining in same dimension",
+                r, bubble_radius
+            ),
+        )
+    };
+
+    Json(WorldWarpResponse {
+        planet,
+        from_dimension,
+        to_dimension,
+        original_coords,
+        warped_coords,
+        did_invert,
+        reason,
     })
 }
