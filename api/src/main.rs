@@ -188,6 +188,32 @@ struct OmegaFlamesResponse {
     channels: Vec<FlameChannel>,
 }
 
+/// Query for /flight/tuning
+#[derive(Deserialize)]
+struct FlightTuningQuery {
+    /// Client FPS, e.g. 60, 120, 144, 1000.
+    fps: f64,
+    /// Planet key, e.g. "earth_shell", "moon_shell", "mars_shell", "sun_shell".
+    planet: String,
+}
+
+/// Response for /flight/tuning
+#[derive(Serialize)]
+struct FlightTuningResponse {
+    phi: f64,
+    server_ticks_per_second: f64,
+    fps: f64,
+    planet: String,
+    /// φ-exponent used for this planet.
+    phi_exponent: f64,
+    /// Acceleration per server tick (1000 Hz basis).
+    accel_per_tick: f64,
+    /// Acceleration per rendered frame on this client.
+    accel_per_frame: f64,
+    /// Suggested "ticks per frame" factor (for clients that want to simulate server ticks).
+    suggested_ticks_per_frame: f64,
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -253,6 +279,7 @@ async fn main() {
         .route("/solar/system", get(solar_system))
         .route("/flight/law", get(flight_law))
         .route("/flight/planet_gravity_table", get(planet_gravity_table))
+        .route("/flight/tuning", get(flight_tuning))
         .route("/omega/flames", get(omega_flames))
         .with_state(state);
 
@@ -522,6 +549,47 @@ async fn planet_gravity_table() -> Json<PlanetGravityTableResponse> {
     })
 }
 
+/// Δv / frame tuning for a client given FPS + planet.
+///
+/// This is the bridge you described:
+/// - Server has a canonical tick rate (1000 Hz basis).
+/// - Each planet has a φ^k-per-tick gravity / flight scale.
+/// - Each client asks: "I run at N FPS; how much accel per frame should I use so it *feels* like Ω?"
+async fn flight_tuning(Query(q): Query<FlightTuningQuery>) -> Json<FlightTuningResponse> {
+    // Canonical "real-world" server tick rate for flight math.
+    let server_tps = 1000.0_f64;
+
+    let fps = if q.fps <= 0.0 { 60.0 } else { q.fps };
+
+    // Map string → φ exponent. We keep it simple and mirror the table.
+    let (planet_key, phi_exponent) = match q.planet.to_lowercase().as_str() {
+        "earth" | "earth_shell" => ("earth_shell".to_string(), 1.0),
+        "moon" | "moon_shell" => ("moon_shell".to_string(), 0.4),
+        "mars" | "mars_shell" => ("mars_shell".to_string(), 0.8),
+        "sun" | "sun_shell" => ("sun_shell".to_string(), 1.5),
+        other => (other.to_string(), 1.0),
+    };
+
+    // Accel per server tick at 1000 Hz.
+    let accel_per_tick = PHI.powf(phi_exponent);
+
+    // If a client simulates exactly server_tps / fps ticks per rendered frame,
+    // this is the factor they'd multiply by in their integration.
+    let suggested_ticks_per_frame = server_tps / fps;
+    let accel_per_frame = accel_per_tick * suggested_ticks_per_frame;
+
+    Json(FlightTuningResponse {
+        phi: PHI,
+        server_ticks_per_second: server_tps,
+        fps,
+        planet: planet_key,
+        phi_exponent,
+        accel_per_tick,
+        accel_per_frame,
+        suggested_ticks_per_frame,
+    })
+}
+
 /// Ω flames endpoint: 4 phi-synced channels, straight up in 3D.
 /// This is the Rust reflection of your old omega_numpy_container's four flames.
 async fn omega_flames(State(state): State<AppState>) -> Json<OmegaFlamesResponse> {
@@ -546,7 +614,7 @@ async fn omega_flames(State(state): State<AppState>) -> Json<OmegaFlamesResponse
 
     let mut channels = Vec::with_capacity(defs.len());
     for (idx, name, pos) in defs.iter().copied() {
-        // φ-driven phase: time * φ plus quarter-turn offsets per channel.
+        // φ-driven phase: time * PHI plus quarter-turn offsets per channel.
         let phase = two_pi * (t * PHI + (idx as f64) / 4.0);
         // Fold sin wave into [0,1] as intensity.
         let intensity = ((phase.sin() + 1.0) * 0.5) as f32;
