@@ -18,6 +18,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
+use tokio::time::{interval, Duration};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Clone)]
@@ -33,6 +34,11 @@ struct HealthResponse {
 
 #[derive(Serialize)]
 struct HeightResponse {
+    height: u64,
+}
+
+#[derive(Serialize)]
+struct TickOnceResponse {
     height: u64,
 }
 
@@ -158,9 +164,38 @@ async fn main() {
         sky: Arc::new(Mutex::new(SkyTimeline::default_eight())),
     };
 
+    // -----------------------------
+    // Background block ticker (Ω heartbeat)
+    // -----------------------------
+    //
+    // This is the "real-world tick" you talked about:
+    //   - One block ≈ one attention sweep through the active universe.
+    //   - Here we approximate it as once every 8 seconds.
+    //
+    // The internal PHI_TICK_HZ is free to be much higher for micro-steps;
+    // this ticker is the big block heartbeat.
+    let ticker_state = state.clone();
+    let block_interval_secs = 8.0; // block ≈ 8 seconds, human-friendly
+
+    tokio::spawn(async move {
+        let mut iv = interval(Duration::from_secs_f64(block_interval_secs));
+        loop {
+            iv.tick().await;
+            let mut universe = ticker_state
+                .universe
+                .lock()
+                .expect("universe lock poisoned (ticker)");
+            universe.tick_block();
+            let h = universe.height;
+            drop(universe);
+            tracing::info!("Ω heartbeat: advanced universe to height={}", h);
+        }
+    });
+
     let app = Router::new()
         .route("/health", get(health))
         .route("/height", get(height))
+        .route("/tick/once", post(tick_once))
         .route("/transfer", post(transfer))
         .route("/sky/current", get(sky_current))
         .route("/policy/money", get(money_policy))
@@ -177,7 +212,11 @@ async fn main() {
         .route("/flight/law", get(flight_law))
         .with_state(state);
 
-    tracing::info!("dlog-api listening on http://{addr} (phi_tick_hz={tick_hz})");
+    tracing::info!(
+        "dlog-api listening on http://{addr} (phi_tick_hz={} | block_interval≈{}s)",
+        tick_hz,
+        block_interval_secs
+    );
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
@@ -193,6 +232,13 @@ async fn height(State(state): State<AppState>) -> Json<HeightResponse> {
     Json(HeightResponse {
         height: universe.height,
     })
+}
+
+async fn tick_once(State(state): State<AppState>) -> Json<TickOnceResponse> {
+    let mut universe = state.universe.lock().expect("universe lock poisoned");
+    universe.tick_block();
+    let height = universe.height;
+    Json(TickOnceResponse { height })
 }
 
 async fn transfer(
