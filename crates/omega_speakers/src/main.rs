@@ -1,15 +1,3 @@
-mkdir -p "$HOME/Desktop/dlog/crates/omega_speakers/src"
-cat > "$HOME/Desktop/dlog/crates/omega_speakers/Cargo.toml" << 'EOF'
-[package]
-name = "omega_speakers"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-cpal = "0.15"
-EOF
-
-cat > "$HOME/Desktop/dlog/crates/omega_speakers/src/main.rs" << 'EOF'
 use std::f32::consts::PI;
 use std::time::{Duration, Instant};
 
@@ -114,4 +102,3 @@ where
 
     Ok(stream)
 }
-EOF
