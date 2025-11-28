@@ -3,18 +3,29 @@
 # refold.command
 #
 # DLOG / Ω-Physics / Kubernetes orchestrator
-# GOLDEN BRICK — “flames + working stack-up”
+# GOLDEN BRICK — “9∞ master root + flames control + resilient stack-up”
 # -------------------------------------------------------------
 # - start.command is STILL dead. We never touch it.
 # - dlog.command on Desktop is the only launcher we honor.
 #
-# New / fixed in this brick:
-#   * stack-up now actually flattens all universes into stack;universe.
-#   * flames stub so dlog.command → `refold.command flames` is clean.
+# New / changed in this brick:
+#   * 9∞ master root:
+#       - Uses STACK + FLAMES to build a hash into 8 Ω segments.
+#       - Lives under: ${OMEGA_INF_ROOT}/;∞;∞;∞;∞;∞;∞;∞;∞;∞;
+#       - Auto-updated on every `beat`.
+#       - Manual: `refold.command root`
+#   * stack-up:
+#       - If called with a phone that has no universes, it falls back
+#         to "all universes" instead of writing an empty stack.
+#   * flames:
+#       - flames           → status stub.
+#       - flames up        → write default 8888 Hz 4-flame control.
+#       - flames down      → write "down" control.
+#       - flames hz <freq> → write control with custom frequency.
 #
 # Commands:
 #   ping, api, scan, paint, kube, universe, status, pair,
-#   beat, orbit, cleanup, stack-up, flames.
+#   beat, orbit, cleanup, stack-up, root, flames.
 # -------------------------------------------------------------
 
 set -euo pipefail
@@ -44,6 +55,10 @@ OMEGA_CONTAINER_REPO_DEFAULT="https://github.com/johnsonluke100/minecraft/tree/m
 DLOG_DOC_URL="${DLOG_DOC_URL:-${DLOG_DOC_URL_DEFAULT}}"
 DLOG_REPO="${DLOG_REPO:-${DLOG_REPO_DEFAULT}}"
 OMEGA_CONTAINER_REPO="${OMEGA_CONTAINER_REPO:-${OMEGA_CONTAINER_REPO_DEFAULT}}"
+
+# Ω filesystem roots
+OMEGA_ROOT="${OMEGA_ROOT:-${DLOG_ROOT}}"
+OMEGA_INF_ROOT="${OMEGA_INF_ROOT:-${OMEGA_ROOT}/∞}"
 
 # --- LOGGING HELPERS --------------------------------------------------------
 
@@ -164,7 +179,7 @@ epoch_to_datetime() {
   local epoch="$1"
   if date -r "${epoch}" '+%Y-%m-%d %H:%M:%S' >/dev/null 2>&1; then
     date -r "${epoch}" '+%Y-%m-%d %H:%M:%S'
-  elif date -d "@${epoch}" '+%Y-%m-%d %H:%M:%S' >/dev/null 2>&1; then
+  elif date -d "@${epoch}" '+%Y-%m-%d %H:%M:%S' >/devnull 2>&1; then
     date -d "@${epoch}" '+%Y-%m-%d %H:%M:%S'
   else
     printf 'epoch:%s\n' "${epoch}"
@@ -179,7 +194,7 @@ humanize_duration() {
   local d h m s
   d=$(( total / 86400 ))
   h=$(( (total % 86400) / 3600 ))
-  m=$(( (total % 3600) / 60 ))
+  m=$(( (total % 86400) / 60 ))
   s=$(( total % 60 ))
 
   local out=""
@@ -346,7 +361,7 @@ YAML
 }
 
 kube_apply_manifests() {
-  kube_write_starter_manifest_if_missing
+  kube_write_starter_manifest_if_missing()
 
   if ! kube_check_cluster; then
     log_warn "Cluster not reachable; skipping kubectl apply for now."
@@ -548,6 +563,8 @@ cmd_ping() {
   log_info "KUBE_MANIFEST:${KUBE_MANIFEST_ROOT}"
   log_info "DLOG_DOC_URL: ${DLOG_DOC_URL}"
   log_info "DLOG_REPO:    ${DLOG_REPO}"
+  log_info "OMEGA_ROOT:   ${OMEGA_ROOT}"
+  log_info "Ω-INF-ROOT:   ${OMEGA_INF_ROOT}"
 
   if ensure_dlog_command; then
     log_info "dlog.command is present and executable."
@@ -574,7 +591,7 @@ GitHub Repos:
   Omega container (legacy):  ${OMEGA_CONTAINER_REPO}
 
 refold.command:
-  - Orchestrator for universes, stacks, and Kubernetes sync.
+  - Orchestrator for universes, stacks, flames, and Kubernetes sync.
   - Never calls start.command. Only dlog.command.
 EOF
 }
@@ -729,7 +746,7 @@ cmd_paint() {
   fi
 }
 
-# --- STACK-UP (FIXED) -------------------------------------------------------
+# --- STACK-UP (with fallback) ----------------------------------------------
 
 build_stack_snapshot() {
   local phone_filter="${1:-}"
@@ -741,37 +758,31 @@ build_stack_snapshot() {
   local now_epoch
   now_epoch="$(date +%s)"
   local found=0
+  local files=""
+
+  if [ -n "${phone_filter}" ] && [ -d "${UNIVERSE_ROOT}/${phone_filter}" ]; then
+    files="$(find "${UNIVERSE_ROOT}/${phone_filter}" -type f -name '*;universe' 2>/dev/null || true)"
+    if [ -z "${files}" ]; then
+      files="$(find "${UNIVERSE_ROOT}" -type f -name '*;universe' 2>/dev/null || true)"
+    fi
+  else
+    files="$(find "${UNIVERSE_ROOT}" -type f -name '*;universe' 2>/dev/null || true)"
+  fi
 
   {
-    # Header line
     printf ';stack;epoch;%s;ok;\n' "${now_epoch}"
 
-    if [ -z "${phone_filter}" ]; then
-      # All phones
-      while IFS= read -r f; do
+    if [ -n "${files}" ]; then
+      local f line _dummy phone_field label_field epoch_field tag_field status_field _rest octal
+      for f in ${files}; do
         [ -f "${f}" ] || continue
-        local line _dummy phone_field label_field epoch_field tag_field status_field _rest octal
         line="$(cat "${f}")"
         IFS=';' read -r _dummy phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
         octal="$(printf '%o' "${epoch_field}")"
         printf ';%s;%s;%s;%s;%s;%s;\n' \
           "${phone_field}" "${label_field}" "${epoch_field}" "${octal}" "${tag_field}" "${status_field}"
         found=$((found+1))
-      done < <(find "${UNIVERSE_ROOT}" -type f -name '*;universe' 2>/dev/null || true)
-    else
-      # Single phone
-      if [ -d "${UNIVERSE_ROOT}/${phone_filter}" ]; then
-        while IFS= read -r f; do
-          [ -f "${f}" ] || continue
-          local line _dummy phone_field label_field epoch_field tag_field status_field _rest octal
-          line="$(cat "${f}")"
-          IFS=';' read -r _dummy phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
-          octal="$(printf '%o' "${epoch_field}")"
-          printf ';%s;%s;%s;%s;%s;%s;\n' \
-            "${phone_field}" "${label_field}" "${epoch_field}" "${octal}" "${tag_field}" "${status_field}"
-          found=$((found+1))
-        done < <(find "${UNIVERSE_ROOT}/${phone_filter}" -type f -name '*;universe' 2>/dev/null || true)
-      fi
+      done
     fi
   } > "${out}"
 
@@ -806,6 +817,70 @@ as the single "flattened" view of all universes.
 EOF
 }
 
+# --- 9∞ MASTER ROOT WRITER --------------------------------------------------
+
+write_nine_inf_root() {
+  ensure_dir "${OMEGA_INF_ROOT}"
+
+  local stack_file="${STACK_ROOT}/stack;universe"
+  local flames_file="${DLOG_ROOT}/flames/flames;control"
+  local tmp="${OMEGA_INF_ROOT}/.root_build.$$"
+
+  {
+    if [ -f "${stack_file}" ]; then cat "${stack_file}"; fi
+    if [ -f "${flames_file}" ]; then cat "${flames_file}"; fi
+  } > "${tmp}" 2>/dev/null || true
+
+  local digest=""
+  if [ -s "${tmp}" ]; then
+    if command -v shasum >/dev/null 2>&1; then
+      digest="$(shasum -a 256 "${tmp}" | awk '{print $1}')"
+    elif command -v sha256sum >/dev/null 2>&1; then
+      digest="$(sha256sum "${tmp}" | awk '{print $1}')"
+    elif command -v openssl >/dev/null 2>&1; then
+      digest="$(openssl dgst -sha256 "${tmp}" | awk '{print $2}')"
+    else
+      digest="0000000000000000000000000000000000000000000000000000000000000000"
+    fi
+  else
+    digest="0000000000000000000000000000000000000000000000000000000000000000"
+  fi
+  rm -f "${tmp}"
+
+  digest="${digest:-0000000000000000000000000000000000000000000000000000000000000000}"
+
+  local O1 O2 O3 O4 O5 O6 O7 O8
+  O1="${digest:0:8}"
+  O2="${digest:8:8}"
+  O3="${digest:16:8}"
+  O4="${digest:24:8}"
+  O5="${digest:32:8}"
+  O6="${digest:40:8}"
+  O7="${digest:48:8}"
+  O8="${digest:56:8}"
+
+  local root_file="${OMEGA_INF_ROOT}/;∞;∞;∞;∞;∞;∞;∞;∞;∞;"
+  printf ';∞;∞;∞;∞;∞;∞;∞;∞;∞;%s;%s;%s;%s;%s;%s;%s;%s;\n' \
+    "${O1}" "${O2}" "${O3}" "${O4}" "${O5}" "${O6}" "${O7}" "${O8}" > "${root_file}"
+
+  log_info "wrote 9∞ master root → ${root_file}"
+}
+
+cmd_root() {
+  banner "refold.command root (9∞ master)"
+
+  write_nine_inf_root
+
+  local root_file="${OMEGA_INF_ROOT}/;∞;∞;∞;∞;∞;∞;∞;∞;∞;"
+  if [ -f "${root_file}" ]; then
+    printf '9∞ Master Root contents:\n\n'
+    cat "${root_file}"
+    echo
+  else
+    log_warn "9∞ master root file not found at: ${root_file}"
+  fi
+}
+
 # --- BEAT / ORBIT -----------------------------------------------------------
 
 cmd_beat() {
@@ -829,7 +904,10 @@ cmd_beat() {
   log_info "3) Updating stack snapshot (stack-up)"
   build_stack_snapshot
 
-  log_info "4) (Optional) Notifying dlog.command with 'beat'"
+  log_info "4) Updating 9∞ master root"
+  write_nine_inf_root
+
+  log_info "5) (Optional) Notifying dlog.command with 'beat'"
   if ensure_dlog_command; then
     if ! call_dlog beat; then
       log_warn "dlog.command beat exited non-zero (or not implemented)."
@@ -846,6 +924,7 @@ This beat:
   - Re-synced all universes into kube/universe/*.yaml
   - Applied them to Kubernetes if a cluster is reachable
   - Updated the Ω-stack snapshot at ${STACK_ROOT}/stack;universe
+  - Updated the 9∞ master root under ${OMEGA_INF_ROOT}
   - Poked dlog.command with "beat" if the new launcher is available
 
 EOF
@@ -899,7 +978,7 @@ Right now it does nothing destructive and always exits 0.
 EOF
 }
 
-# --- FLAMES (NEW STUB) ------------------------------------------------------
+# --- FLAMES (CONTROL SURFACE) ----------------------------------------------
 
 cmd_flames() {
   local sub="${1:-status}"
@@ -911,20 +990,85 @@ cmd_flames() {
       cat <<EOF
 Ω-speakers / flames status (stub)
 
-refold.command does not start audio itself yet.
+refold.command does not start audio itself.
 dlog.command (and your Rust omega_speakers binary) are responsible
 for actual sound generation.
 
-This stub exists so that:
+This command is safe and side-effect free unless you call:
 
-  ${SCRIPT_NAME} flames
+  ${SCRIPT_NAME} flames up
+  ${SCRIPT_NAME} flames down
+  ${SCRIPT_NAME} flames hz <frequencyHz>
 
-returns cleanly with exit code 0.
+Those only write a semicolon control file under:
 
-Future ideas:
-  - ${SCRIPT_NAME} flames up   → launch omega_speakers
-  - ${SCRIPT_NAME} flames down → stop omega_speakers
-  - ${SCRIPT_NAME} flames hz   → write semicolon control files.
+  ${DLOG_ROOT}/flames/flames;control
+
+EOF
+      ;;
+    up)
+      ensure_dir "${DLOG_ROOT}/flames"
+      local control="${DLOG_ROOT}/flames/flames;control"
+      local now_epoch
+      now_epoch="$(date +%s)"
+      {
+        printf ';flames;epoch;%s;up;ok;\n' "${now_epoch}"
+        printf ';omega;hz;8888;cpu=heart;gpu=brain;flames;4;\n'
+      } > "${control}"
+      log_info "wrote flames control → ${control}"
+      cat <<EOF
+Flames "up" control written.
+
+This does NOT start audio by itself.
+Your omega_speakers / Ω-engine can watch:
+
+  ${control}
+
+and interpret the semicolon lines however it wants.
+
+EOF
+      ;;
+    down)
+      ensure_dir "${DLOG_ROOT}/flames"
+      local control="${DLOG_ROOT}/flames/flames;control"
+      local now_epoch
+      now_epoch="$(date +%s)"
+      {
+        printf ';flames;epoch;%s;down;ok;\n' "${now_epoch}"
+      } > "${control}"
+      log_info "wrote flames control → ${control}"
+      cat <<EOF
+Flames "down" control written.
+
+Engines watching the control file can treat this as:
+  - fade gain to 0, or
+  - safely shut off all tones.
+
+EOF
+      ;;
+    hz)
+      local hz="${2:-}"
+      if [ -z "${hz}" ]; then
+        die "usage: ${SCRIPT_NAME} flames hz <frequencyHz>"
+      fi
+      ensure_dir "${DLOG_ROOT}/flames"
+      local control="${DLOG_ROOT}/flames/flames;control"
+      local now_epoch
+      now_epoch="$(date +%s)"
+      {
+        printf ';flames;epoch;%s;hz;ok;\n' "${now_epoch}"
+        printf ';omega;hz;%s;cpu=heart;gpu=brain;flames;4;\n' "${hz}"
+      } > "${control}"
+      log_info "wrote flames control → ${control}"
+      cat <<EOF
+Flames frequency control written for hz=${hz}.
+
+refold.command still does not start audio.
+Rust omega_speakers (or any Ω-engine) can read:
+
+  ${control}
+
+and re-tune itself accordingly.
 
 EOF
       ;;
@@ -932,12 +1076,17 @@ EOF
       cat <<EOF
 flames subcommand not yet implemented: ${sub}
 
-Supported (for now):
+Supported:
 
   ${SCRIPT_NAME} flames
   ${SCRIPT_NAME} flames status
+  ${SCRIPT_NAME} flames up
+  ${SCRIPT_NAME} flames down
+  ${SCRIPT_NAME} flames hz <frequencyHz>
 
-Both are safe stubs (no side effects) and exit 0.
+All are safe (no direct audio), and only write a control file under:
+
+  ${DLOG_ROOT}/flames/flames;control
 
 EOF
       ;;
@@ -962,7 +1111,8 @@ Usage:
   ${SCRIPT_NAME} orbit [phone]
   ${SCRIPT_NAME} cleanup
   ${SCRIPT_NAME} stack-up [phone]
-  ${SCRIPT_NAME} flames [status]
+  ${SCRIPT_NAME} root
+  ${SCRIPT_NAME} flames [status|up|down|hz <freq>]
 
 Notes:
   - This script never calls start.command.
@@ -1014,6 +1164,9 @@ main() {
       ;;
     stack-up)
       cmd_stack_up "$@"
+      ;;
+    root)
+      cmd_root "$@"
       ;;
     flames)
       cmd_flames "$@"
