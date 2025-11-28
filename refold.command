@@ -170,7 +170,6 @@ sky_play() {
     write_sky_manifest_and_timeline
   fi
 
-  # extract omega_hz from: ;timeline;episodes;8;omega_hz;7777;curve;cosine;loop;true;
   omega_hz="$(grep '^;timeline;episodes;' "$timeline" | awk -F';' '{print $6}' || echo "7777")"
 
   log_info "Ω-sky play: episodes=8 ω_hz=$omega_hz curve=cosine loop=true"
@@ -233,13 +232,18 @@ kube_sync_universe() {
   fi
 }
 
-# ---------- Flames ----------
+# ---------- Flames (UPDATED: default to hz=OMEGA_HZ or 7777) ----------
 flames_cmd() {
   ensure_dirs
   local sub="${1:-}"
+  # If called as just `refold.command flames`, default to `hz` using OMEGA_HZ/7777
+  if [[ -z "$sub" ]]; then
+    sub="hz"
+  fi
+
   case "$sub" in
     hz)
-      local hz="${2:-7777}"
+      local hz="${2:-${OMEGA_HZ:-7777}}"
       local height friction file epoch
       height=7
       friction="leidenfrost"
@@ -431,7 +435,7 @@ Usage:
   ~/Desktop/refold.command beat          # sync stack, 9∞, sky, kube, poke dlog.command
   ~/Desktop/refold.command stack-up      # standalone stack snapshot stub (for dlog.command)
   ~/Desktop/refold.command ping          # show environment + kube wiring
-  ~/Desktop/refold.command flames hz 7777|up|down
+  ~/Desktop/refold.command flames [hz <freqHz>|up|down]
   ~/Desktop/refold.command sky           # regenerate sky manifest + timeline (print)
   ~/Desktop/refold.command sky play      # stream Ω-sky crossfade phases (Ctrl+C to stop)
   ~/Desktop/refold.command speakers      # run Rust Ω-speakers (reads flames + sky)
