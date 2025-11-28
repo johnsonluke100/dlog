@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dlog-api
+  namespace: dlog
+  labels:
+    app: dlog-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dlog-api
+  template:
+    metadata:
+      labels:
+        app: dlog-api
+    spec:
+      containers:
+        - name: dlog-api
+          image: dlog-api:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DLOG_LAYER
+              value: "OMEGA"
+            - name: DLOG_BASE
+              value: "8"
+            - name: DLOG_HTTP_BASE
+              value: "http://0.0.0.0:8888"
+          ports:
+            - containerPort: 8888
