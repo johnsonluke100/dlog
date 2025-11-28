@@ -3,22 +3,21 @@
 # refold.command
 #
 # DLOG / Ω-Physics / Kubernetes orchestrator
-# GOLDEN BRICK #3
+# GOLDEN BRICK #4 — “paint + beat”
 # -------------------------------------------------------------
 # - start.command is STILL dead. We never touch it.
 # - dlog.command on Desktop is the only launcher we honor.
 #
 # New in this brick:
-#   * scan      → list all universes (phone + label + epoch + tag + state).
-#   * kube sync → turn every universe into a Kubernetes ConfigMap manifest
-#                 under dlog/kube/universe/ and, if a cluster exists,
-#                 kubectl apply them.
+#   * paint         → visual, artsy view of universes.
+#   * status extra  → human datetime, base-8 epoch, age.
+#   * beat upgraded → actually syncs YAML + Kubernetes + dlog.command.
 #
 # Existing:
-#   * ping, api
-#   * kube init/apply/status/logs/port-forward/provider
-#   * universe, status, pair
-#   * beat, orbit (safe stubs)
+#   * ping, api, scan
+#   * kube init/apply/status/logs/port-forward/provider/sync
+#   * universe, pair
+#   * orbit (safe stub)
 # -------------------------------------------------------------
 
 set -euo pipefail
@@ -112,16 +111,15 @@ ensure_dlog_command() {
 }
 
 call_dlog() {
-  # Thin wrapper – never call start.command here.
   ensure_dlog_command || return 1
   log_info "delegating to dlog.command → $*"
-  "${DLOG_COMMAND}" "$@"
+  "${DLOG_COMMAND}" "$@" || return $?
 }
 
 # --- UNIVERSE FILE MAPPING --------------------------------------------------
 # Format (for now):
 #   ;phone;label;epoch;tag;status;
-# You can later expand this to hold Ω segments (O1..O8).
+# You can later extend with Ω segments (O1..O8).
 
 universe_file_path() {
   local phone="$1"
@@ -163,7 +161,39 @@ read_universe_or_die() {
   cat "${file}"
 }
 
-# --- UNIVERSE SCAN (NEW) ----------------------------------------------------
+# --- TIME & SCALE HELPERS (HUMAN + BASE-8) ---------------------------------
+
+epoch_to_datetime() {
+  local epoch="$1"
+  if date -r "${epoch}" '+%Y-%m-%d %H:%M:%S' >/dev/null 2>&1; then
+    date -r "${epoch}" '+%Y-%m-%d %H:%M:%S'
+  elif date -d "@${epoch}" '+%Y-%m-%d %H:%M:%S' >/dev/null 2>&1; then
+    date -d "@${epoch}" '+%Y-%m-%d %H:%M:%S'
+  else
+    printf 'epoch:%s\n' "${epoch}"
+  fi
+}
+
+humanize_duration() {
+  local total="$1"
+  if [ "${total}" -lt 0 ] 2>/dev/null; then
+    total=0
+  fi
+  local d h m s
+  d=$(( total / 86400 ))
+  h=$(( (total % 86400) / 3600 ))
+  m=$(( (total % 3600) / 60 ))
+  s=$(( total % 60 ))
+
+  local out=""
+  if [ "${d}" -gt 0 ]; then out="${out}${d}d "; fi
+  if [ "${h}" -gt 0 ]; then out="${out}${h}h "; fi
+  if [ "${m}" -gt 0 ]; then out="${out}${m}m "; fi
+  if [ "${s}" -gt 0 ] || [ -z "${out}" ]; then out="${out}${s}s"; fi
+  printf '%s\n' "${out}"
+}
+
+# --- UNIVERSE SCAN ----------------------------------------------------------
 
 cmd_scan() {
   banner "refold.command scan (all universes)"
@@ -195,22 +225,18 @@ cmd_scan() {
 # --- KUBERNETES HELPERS -----------------------------------------------------
 
 detect_kube_provider() {
-  # Echo one of: kind, minikube, external, none
   if optional_cmd kind; then
     printf 'kind\n'
     return 0
   fi
-
   if optional_cmd minikube; then
     printf 'minikube\n'
     return 0
   fi
-
   if optional_cmd kubectl; then
     printf 'external\n'
     return 0
   fi
-
   printf 'none\n'
   return 0
 }
@@ -221,7 +247,6 @@ ensure_kubectl() {
   fi
 }
 
-# Check if kubectl can reach *any* cluster without spamming raw errors.
 kube_check_cluster() {
   ensure_kubectl
   if ! kubectl cluster-info >/dev/null 2>&1; then
@@ -236,7 +261,6 @@ kube_check_cluster() {
 }
 
 kube_create_namespace_if_missing() {
-  # Soft behavior: if there is no cluster, don't crash; just log and return.
   if ! kube_check_cluster; then
     log_warn "Skipping namespace creation because no cluster is reachable yet."
     return 0
@@ -383,7 +407,7 @@ kube_port_forward() {
   kubectl port-forward -n "${KUBE_NAMESPACE}" "svc/${svc}" "${local_port}:${remote_port}"
 }
 
-# --- UNIVERSE → CONFIGMAP YAML (NEW) ----------------------------------------
+# --- UNIVERSE → CONFIGMAP YAML ---------------------------------------------
 
 write_universe_configmap_yaml() {
   local phone="$1"
@@ -405,7 +429,6 @@ write_universe_configmap_yaml() {
   ensure_dir "${KUBE_MANIFEST_ROOT}/universe"
   local yaml="${KUBE_MANIFEST_ROOT}/universe/${phone_field}-${label_field}.yaml"
 
-  # Escape double quotes in raw line.
   local raw_escaped="${line//\"/\\\"}"
 
   cat > "${yaml}" <<EOF
@@ -440,9 +463,9 @@ sync_universe_manifests() {
 
   local f filename label phone
   for f in ${files}; do
-    filename="$(basename "${f}")"   # e.g. vortex;universe
-    label="${filename%%;*}"         # e.g. vortex
-    phone="$(basename "$(dirname "${f}")")"  # e.g. 9132077554
+    filename="$(basename "${f}")"              # e.g. vortex;universe
+    label="${filename%%;*}"                   # e.g. vortex
+    phone="$(basename "$(dirname "${f}")")"   # e.g. 9132077554
     write_universe_configmap_yaml "${phone}" "${label}"
   done
 }
@@ -580,11 +603,6 @@ Local Dev Expectations:
       * Kubernetes helper verbs,
       * simple per-phone/per-label universe snapshots.
 
-  - You can map Kubernetes services to friendly URLs via ingress:
-      * https://dlog.local/∞/
-      * https://dlog.local/9132077554/comet/status/
-      * etc.
-
 EOF
 }
 
@@ -621,18 +639,28 @@ cmd_status() {
 
   banner "Universe status for phone=${phone} label=${label}"
 
-  # Auto-birth universe if missing instead of hard error.
   local file
   file="$(write_universe_if_missing "${phone}" "${label}")"
-
   local line
   line="$(cat "${file}")"
 
-  IFS=';' read -r _ phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
+  local _dummy phone_field label_field epoch_field tag_field status_field _rest
+  IFS=';' read -r _dummy phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
+
+  local when octal now age
+  when="$(epoch_to_datetime "${epoch_field}")"
+  octal="$(printf '%o' "${epoch_field}")"
+  now="$(date +%s)"
+  age=$(( now - epoch_field ))
+  local age_str
+  age_str="$(humanize_duration "${age}")"
 
   printf 'Phone : %s\n' "${phone_field}"
   printf 'Label : %s\n' "${label_field}"
   printf 'Epoch : %s\n' "${epoch_field}"
+  printf 'Epoch₈: %s\n' "${octal}"
+  printf 'When  : %s\n' "${when}"
+  printf 'Age   : %s ago\n' "${age_str}"
   printf 'Tag   : %s\n' "${tag_field}"
   printf 'State : %s\n' "${status_field}"
   echo
@@ -663,19 +691,112 @@ cmd_pair() {
   echo "------------------------------------------------------"
 }
 
-# --- BEAT / ORBIT (SAFE STUBS) ---------------------------------------------
+# --- PAINT (NEW) -----------------------------------------------------------
+
+label_symbol() {
+  local lbl_lower
+  lbl_lower="$(printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "${lbl_lower}" in
+    vortex) printf '●';;
+    comet)  printf '○';;
+    *)      printf '◆';;
+  esac
+}
+
+paint_phone() {
+  local phone="$1"
+
+  local dir="${UNIVERSE_ROOT}/${phone}"
+  if [ ! -d "${dir}" ]; then
+    return 0
+  fi
+
+  printf 'Phone %s\n' "${phone}"
+  printf '------------------------------------------------------\n'
+
+  local f
+  for f in "${dir}"/*';universe'; do
+    [ -f "${f}" ] || continue
+    local line
+    line="$(cat "${f}")"
+    local _dummy phone_field label_field epoch_field tag_field status_field _rest
+    IFS=';' read -r _dummy phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
+
+    local sym when octal now age age_str
+    sym="$(label_symbol "${label_field}")"
+    when="$(epoch_to_datetime "${epoch_field}")"
+    octal="$(printf '%o' "${epoch_field}")"
+    now="$(date +%s)"
+    age=$(( now - epoch_field ))
+    age_str="$(humanize_duration "${age}")"
+
+    printf '  [%s] %-7s ── tag=%-6s state=%-4s epoch=%-12s (₈=%s) age=%s ago at %s\n' \
+      "${sym}" "${label_field}" "${tag_field}" "${status_field}" "${epoch_field}" "${octal}" "${age_str}" "${when}"
+  done
+
+  printf '\n'
+}
+
+cmd_paint() {
+  local phone="${1:-}"
+
+  banner "refold.command paint (universe orbits)"
+
+  ensure_dir "${UNIVERSE_ROOT}"
+
+  if [ -z "${phone}" ]; then
+    local dirs
+    dirs="$(find "${UNIVERSE_ROOT}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null || true)"
+    if [ -z "${dirs}" ]; then
+      log_warn "No universes to paint yet. Seed with 'pair' or 'universe'."
+      return 0
+    fi
+    local d
+    for d in ${dirs}; do
+      paint_phone "$(basename "${d}")"
+    done
+  else
+    paint_phone "${phone}"
+  fi
+}
+
+# --- BEAT / ORBIT -----------------------------------------------------------
 
 cmd_beat() {
   banner "refold.command beat"
+
+  log_info "1) Syncing universes → kube/universe/*.yaml"
+  sync_universe_manifests
+
+  log_info "2) (Optional) Applying to Kubernetes if a cluster is reachable"
+  if kube_check_cluster; then
+    local universe_dir="${KUBE_MANIFEST_ROOT}/universe"
+    if ls "${universe_dir}"/*.yaml >/dev/null 2>&1; then
+      kubectl apply -n "${KUBE_NAMESPACE}" -f "${universe_dir}" || log_warn "kubectl apply (beat) exited non-zero."
+    else
+      log_warn "No universe YAML manifests found under ${universe_dir} (beat)."
+    fi
+  else
+    log_warn "Skipping kubectl apply during beat; no cluster reachable."
+  fi
+
+  log_info "3) (Optional) Notifying dlog.command with 'beat'"
+  if ensure_dlog_command; then
+    if ! call_dlog beat; then
+      log_warn "dlog.command beat exited non-zero (or not implemented)."
+    fi
+  else
+    log_warn "dlog.command not present; skipping external beat."
+  fi
+
+  echo
   cat <<EOF
-Beat is still a SAFE stub.
+Beat complete.
 
-You can later repurpose "beat" as:
-  - a single-block refold tick,
-  - a heartbeat that syncs DLOG state into Kubernetes (ConfigMaps/CRDs),
-  - or a phi-flavored mining/metronome pulse.
-
-For now, it only speaks calmly so your logs remain clean.
+This beat:
+  - Re-synced all universes into kube/universe/*.yaml
+  - Applied them to Kubernetes if a cluster is reachable
+  - Poked dlog.command with "beat" if the new launcher is available
 
 EOF
 }
@@ -691,13 +812,7 @@ orbit currently wants an optional phone number, for example:
 
   ${SCRIPT_NAME} orbit 9132077554
 
-Right now this is a pure visualization stub. No parsers, no errors.
-
-Ideas for future use:
-  - Visualize all active labels around a phone as "orbits".
-  - Use Kubernetes namespaces/pods as orbital shells.
-  - Print phi-scaled radii based on balances and locks.
-
+For now it's a visualization hint; paint is the more detailed output.
 EOF
     return 0
   fi
@@ -710,8 +825,9 @@ Imagine:
   - Distances encoded by balance magnitude.
   - Kubernetes Deployments as stable Lagrange points.
 
-This stub does not parse or compute anything yet; it only prints
-conceptual text so your CLI stays peaceful.
+Use:
+  ${SCRIPT_NAME} paint ${phone}
+to see the detailed lines for this phone.
 
 EOF
 }
@@ -731,28 +847,27 @@ Usage:
   ${SCRIPT_NAME} scan
       → List all universe files in a table (phone/label/epoch/tag/state).
 
+  ${SCRIPT_NAME} paint [phone]
+      → Pretty, artsy rendering of universes for all phones or a single phone.
+
   ${SCRIPT_NAME} kube <subcommand> [args...]
       → Kubernetes helper:
            init, apply, status, logs, port-forward, provider, sync
 
   ${SCRIPT_NAME} universe <phone> <label>
       → Ensure a universe snapshot exists and print its contents.
-         Example:
-           ${SCRIPT_NAME} universe 9132077554 vortex
-           ${SCRIPT_NAME} universe 9132077554 comet
 
   ${SCRIPT_NAME} status <phone> <label>
-      → Pretty-print the parsed fields for a given universe snapshot.
-        Auto-births the universe if it does not exist yet.
+      → Pretty-print a universe (with datetime, base-8 epoch, age).
 
   ${SCRIPT_NAME} pair <phone>
       → Seed both vortex + comet universes for the given phone in one shot.
 
   ${SCRIPT_NAME} beat
-      → Safe stub (no parse errors). Future heartbeat hook.
+      → Heartbeat: sync YAML, apply to Kube (if reachable), ping dlog.command.
 
   ${SCRIPT_NAME} orbit [phone]
-      → Safe stub (no parse errors). Future orbit visualization hook.
+      → Simple orbit hint; pair with 'paint' for full visuals.
 
 Notes:
   - This script never calls start.command.
@@ -778,6 +893,9 @@ main() {
       ;;
     scan)
       cmd_scan "$@"
+      ;;
+    paint)
+      cmd_paint "$@"
       ;;
     kube|kubernetes)
       cmd_kube "$@"
