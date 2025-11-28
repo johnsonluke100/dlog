@@ -1,8 +1,16 @@
 use std::env;
 use std::process::Command;
 
+fn set_terminal_title(title: &str) {
+    // ANSI escape: OSC 0 ; title BEL
+    // Most terminals (Terminal.app, iTerm2, etc.) respect this.
+    print!("\x1b]0;{title}\x07");
+}
+
 fn main() {
-    // Prefer OMEGA_SPEAKER_ROOT, fall back to OMEGA_ROOT, then your default path
+    // Title: directory-ish name + Ω flavor + Rust launcher tag
+    set_terminal_title("dlog — Ω-speakers (Rust launcher)");
+
     let omega_root = env::var("OMEGA_SPEAKER_ROOT")
         .or_else(|_| env::var("OMEGA_ROOT"))
         .unwrap_or_else(|_| "/Users/lj/Desktop/omega_numpy_container".to_string());
