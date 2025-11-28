@@ -1,134 +1,174 @@
+use std::env;
 use std::fs;
-use std::path::PathBuf;
-use std::time::{Duration, Instant};
-use std::thread;
-use std::f32::consts::PI;
 
-use rodio::{OutputStream, Sink, buffer::SamplesBuffer};
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
+use rodio::{OutputStream, Sink, Source};
 
-// === Ω Utilities =========================================================
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Figure out roots
+    let omega_root = env::var("OMEGA_ROOT").unwrap_or_else(|_| ".".to_string());
+    let control_path = format!("{}/flames/flames;control", omega_root);
+    let sky_stream_path = format!("{}/sky/sky;stream", omega_root);
 
-fn read_control_file(path: &PathBuf) -> (f32, f32) {
-    let mut hz: f32 = 7777.0;
-    let mut gain: f32 = 0.0080;
-    if let Ok(content) = fs::read_to_string(path) {
-        for line in content.lines() {
-            if let Some(v) = line.strip_prefix("hz=") {
-                if let Ok(parsed) = v.trim().parse::<f32>() {
-                    hz = parsed;
-                }
-            }
-            if let Some(v) = line.strip_prefix("gain=") {
-                if let Ok(parsed) = v.trim().parse::<f32>() {
-                    gain = parsed;
-                }
-            }
-        }
-    }
-    (hz, gain)
-}
+    // Master gain (you can override with OMEGA_GAIN env)
+    let gain: f32 = env::var("OMEGA_GAIN")
+        .ok()
+        .and_then(|s| s.parse::<f32>().ok())
+        .unwrap_or(0.12);
 
-fn read_sky_phase(path: &PathBuf) -> f32 {
-    if let Ok(content) = fs::read_to_string(path) {
-        if let Some(line) = content.lines().find(|l| l.contains("phase")) {
-            if let Some(val) = line.split_whitespace().last() {
-                if let Ok(parsed) = val.parse::<f32>() {
-                    return parsed;
-                }
-            }
-        }
-    }
-    0.0
-}
+    // Target frequency (prefer hz= from flames;control, else 8888.0)
+    let target_hz = read_hz_from_control(&control_path).unwrap_or(8888.0);
 
-// === Ω Audio: Golden Harmonic Field ======================================
-
-fn make_phi_bloom(freq: f32, amp: f32, pan: f32, dur: Duration, rate: u32) -> SamplesBuffer<f32> {
-    const PHI: f32 = 1.6180339887;
-    let voices = [
-        (1.0, 1.0),
-        (PHI, 0.6),
-        (PHI.powf(2.0), 0.4),
-        (PHI.powf(3.0), 0.3),
-    ];
-
-    let total = (dur.as_secs_f32() * rate as f32) as usize;
-    let mut left = Vec::with_capacity(total);
-    let mut right = Vec::with_capacity(total);
-
-    let pan_l = (1.0 - pan) * 0.5;
-    let pan_r = (1.0 + pan) * 0.5;
-
-    for n in 0..total {
-        let t = n as f32 / rate as f32;
-        let mut s = 0.0;
-        for (mult, vol) in voices {
-            s += (2.0 * PI * freq * mult * t).sin() * amp * vol;
-        }
-        left.push(s * pan_l);
-        right.push(s * pan_r);
-    }
-
-    // interleave L+R
-    let mut data = Vec::with_capacity(total * 2);
-    for i in 0..total {
-        data.push(left[i]);
-        data.push(right[i]);
-    }
-
-    SamplesBuffer::new(2, rate, data)
-}
-
-// === Ω Main ===============================================================
-
-fn main() {
-    let omega_root = std::env::var("OMEGA_ROOT").unwrap_or_else(|_| ".".into());
-    let control_path = PathBuf::from(format!("{}/flames/flames;control", omega_root));
-    let sky_path = PathBuf::from(format!("{}/sky/sky;stream", omega_root));
-
-    println!("=== Ω Rust Speaker Engine (Φ Harmonic Bloom) ===");
+    println!("=== Ω Rust Speaker Engine (Φ Harmonic Bloom v2) ===");
     println!("[+] OMEGA_ROOT     : {}", omega_root);
-    println!("[+] Control File   : {}", control_path.display());
-    println!("[+] Sky Stream     : {}", sky_path.display());
-    println!("[+] Output         : 4-voice golden field engaged ✨🌀");
+    println!("[+] Control File   : {}", control_path);
+    println!("[+] Sky Stream     : {}", sky_stream_path);
+    println!("[+] Target Hz      : {:.2}", target_hz);
+    println!("[+] MASTER_GAIN    : {:.6}", gain);
+    println!("[+] Output         : 4-voice ocean torch engaged 🌊🔥");
 
-    let (_stream, handle) = OutputStream::try_default().expect("No output stream");
-    let sink = Sink::try_new(&handle).expect("No sink");
+    let (_stream, stream_handle) = OutputStream::try_default()?;
+    let sink = Sink::try_new(&stream_handle)?;
 
-    let mut last_hz = 0.0;
-    let mut last_gain = 0.0;
-    let mut last_phase = 0.0;
-    let start = Instant::now();
+    // One continuous flame field
+    let source = FlameField::new(target_hz, gain);
+    sink.append(source);
 
-    loop {
-        let (hz, gain) = read_control_file(&control_path);
-        let phase = read_sky_phase(&sky_path);
+    sink.sleep_until_end();
+    Ok(())
+}
 
-        let mod_hz = hz * (1.0 + phase * 0.002);
-        let mod_gain = gain * (1.0 + (phase * 0.5));
-        let pan = (phase.cos() * 2.0 - 1.0).clamp(-1.0, 1.0);
-
-        if (mod_hz - last_hz).abs() > 0.1
-            || (mod_gain - last_gain).abs() > 0.0001
-            || (phase - last_phase).abs() > 0.001
-        {
-            last_hz = mod_hz;
-            last_gain = mod_gain;
-            last_phase = phase;
-
-            println!(
-                "[Ω] t={:.2?} hz={:.2} gain={:.5} phase={:.3} pan={:.3} Φ-bloom",
-                start.elapsed(),
-                mod_hz,
-                mod_gain,
-                phase,
-                pan
-            );
-
-            let wave = make_phi_bloom(mod_hz, mod_gain, pan, Duration::from_millis(400), 44100);
-            sink.append(wave);
+fn read_hz_from_control(path: &str) -> Option<f32> {
+    let text = fs::read_to_string(path).ok()?;
+    for line in text.lines() {
+        if let Some(rest) = line.trim().strip_prefix("hz=") {
+            // expect "hz=7777 height=7 friction=leidenfrost"
+            let hz_part = rest.split_whitespace().next().unwrap_or("");
+            if let Ok(v) = hz_part.parse::<f32>() {
+                return Some(v);
+            }
         }
+    }
+    None
+}
 
-        thread::sleep(Duration::from_millis(250));
+/// Φ-rich vortex field:
+/// - carrier_hz (e.g. 7777 / 8888)
+/// - low band at ~262 Hz (body)
+/// - mid band at ~1111 Hz (edge)
+/// - noise “foam” shaped by slow LFO
+/// - slow stereo drift (pan LFO)
+struct FlameField {
+    sample_rate: u32,
+    carrier_hz: f32,
+    gain: f32,
+
+    // phased voices
+    phase_carrier: f32,
+    phase_low1: f32,
+    phase_low2: f32,
+    phase_lfo_amp: f32,
+    phase_lfo_pan: f32,
+
+    // noise + stereo framing
+    noise_rng: SmallRng,
+    next_is_left: bool,
+    last_left: f32,
+    last_right: f32,
+}
+
+impl FlameField {
+    fn new(carrier_hz: f32, gain: f32) -> Self {
+        Self {
+            sample_rate: 44_100,
+            carrier_hz,
+            gain,
+            phase_carrier: 0.0,
+            phase_low1: 0.0,
+            phase_low2: 0.0,
+            phase_lfo_amp: 0.0,
+            phase_lfo_pan: 0.0,
+            noise_rng: SmallRng::from_entropy(),
+            next_is_left: true,
+            last_left: 0.0,
+            last_right: 0.0,
+        }
+    }
+
+    fn step_frame(&mut self) {
+        let sr = self.sample_rate as f32;
+
+        // advance phases
+        self.phase_carrier = (self.phase_carrier + self.carrier_hz / sr) % 1.0;
+        self.phase_low1 = (self.phase_low1 + 262.3 / sr) % 1.0;
+        self.phase_low2 = (self.phase_low2 + 1111.0 / sr) % 1.0;
+        self.phase_lfo_amp = (self.phase_lfo_amp + 0.333 / sr) % 1.0;
+        self.phase_lfo_pan = (self.phase_lfo_pan + 0.072 / sr) % 1.0;
+
+        let theta = std::f32::consts::TAU;
+
+        let s_carrier = (self.phase_carrier * theta).sin(); // 8888 bed
+        let s_low1 = (self.phase_low1 * theta).sin();       // deep body
+        let s_low2 = (self.phase_low2 * theta).sin();       // “edge” band
+
+        // soft pink-ish noise: white * slow envelope
+        let white: f32 = self.noise_rng.gen_range(-1.0..=1.0);
+        let lfo_amp = (self.phase_lfo_amp * theta).sin();
+        let foam_env = 0.55 + 0.35 * lfo_amp; // ~0.2..0.9
+        let foam = white * foam_env;
+
+        // mix the three tone bands + foam
+        let high = s_carrier * 0.40;
+        let body = s_low1 * 0.55 + s_low2 * 0.30;
+        let mono = (high + body + foam * 0.45) * 0.7;
+
+        // slow stereo pan: gentle drift, not spinning
+        let pan_lfo = (self.phase_lfo_pan * theta).sin();
+        let pan = 0.5 + 0.35 * pan_lfo; // 0.15 .. 0.85
+
+        let left = mono * (1.0 - pan);
+        let right = mono * pan;
+
+        // apply gain + soft clip
+        let gl = (left * self.gain).tanh();
+        let gr = (right * self.gain).tanh();
+
+        self.last_left = gl.clamp(-1.0, 1.0);
+        self.last_right = gr.clamp(-1.0, 1.0);
+    }
+}
+
+impl Iterator for FlameField {
+    type Item = f32;
+
+    fn next(&mut self) -> Option<f32> {
+        if self.next_is_left {
+            // compute a new stereo frame
+            self.step_frame();
+            self.next_is_left = false;
+            Some(self.last_left)
+        } else {
+            self.next_is_left = true;
+            Some(self.last_right)
+        }
+    }
+}
+
+impl Source for FlameField {
+    fn current_frame_len(&self) -> Option<usize> {
+        None
+    }
+
+    fn channels(&self) -> u16 {
+        2
+    }
+
+    fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    fn total_duration(&self) -> Option<std::time::Duration> {
+        None
     }
 }
