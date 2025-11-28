@@ -3,20 +3,18 @@
 # refold.command
 #
 # DLOG / Ω-Physics / Kubernetes orchestrator
-# GOLDEN BRICK — “stack-up”
+# GOLDEN BRICK — “flames + working stack-up”
 # -------------------------------------------------------------
 # - start.command is STILL dead. We never touch it.
 # - dlog.command on Desktop is the only launcher we honor.
 #
-# New in this brick:
-#   * stack-up [phone] → flattens universes into a stack snapshot:
-#       ~/Desktop/dlog/stack/stack;universe
-#     in semicolon format:
-#       ;stack;epoch;<now>;ok;
-#       ;phone;label;epoch;epoch8;tag;state;
+# New / fixed in this brick:
+#   * stack-up now actually flattens all universes into stack;universe.
+#   * flames stub so dlog.command → `refold.command flames` is clean.
 #
-# Keeps all previous commands:
-#   ping, api, scan, paint, kube, universe, status, pair, beat, orbit, cleanup.
+# Commands:
+#   ping, api, scan, paint, kube, universe, status, pair,
+#   beat, orbit, cleanup, stack-up, flames.
 # -------------------------------------------------------------
 
 set -euo pipefail
@@ -731,7 +729,7 @@ cmd_paint() {
   fi
 }
 
-# --- STACK-UP (NEW) ---------------------------------------------------------
+# --- STACK-UP (FIXED) -------------------------------------------------------
 
 build_stack_snapshot() {
   local phone_filter="${1:-}"
@@ -742,38 +740,42 @@ build_stack_snapshot() {
   local out="${STACK_ROOT}/stack;universe"
   local now_epoch
   now_epoch="$(date +%s)"
-
-  # Collect files (optionally filtered to a single phone)
-  local files
-  if [ -z "${phone_filter}" ]; then
-    files="$(find "${UNIVERSE_ROOT}" -type f -name '*;universe' 2>/dev/null || true)"
-  else
-    if [ -d "${UNIVERSE_ROOT}/${phone_filter}" ]; then
-      files="$(find "${UNIVERSE_ROOT}/${phone_filter}" -type f -name '*;universe' 2>/dev/null || true)"
-    else
-      files=""
-    fi
-  fi
+  local found=0
 
   {
-    # Header line: current stack epoch
+    # Header line
     printf ';stack;epoch;%s;ok;\n' "${now_epoch}"
 
-    if [ -n "${files}" ]; then
-      local f line _dummy phone_field label_field epoch_field tag_field status_field _rest octal
-      for f in ${files}; do
+    if [ -z "${phone_filter}" ]; then
+      # All phones
+      while IFS= read -r f; do
+        [ -f "${f}" ] || continue
+        local line _dummy phone_field label_field epoch_field tag_field status_field _rest octal
         line="$(cat "${f}")"
         IFS=';' read -r _dummy phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
         octal="$(printf '%o' "${epoch_field}")"
-        # One line per universe:
-        # ;phone;label;epoch;epoch8;tag;status;
         printf ';%s;%s;%s;%s;%s;%s;\n' \
           "${phone_field}" "${label_field}" "${epoch_field}" "${octal}" "${tag_field}" "${status_field}"
-      done
+        found=$((found+1))
+      done < <(find "${UNIVERSE_ROOT}" -type f -name '*;universe' 2>/dev/null || true)
+    else
+      # Single phone
+      if [ -d "${UNIVERSE_ROOT}/${phone_filter}" ]; then
+        while IFS= read -r f; do
+          [ -f "${f}" ] || continue
+          local line _dummy phone_field label_field epoch_field tag_field status_field _rest octal
+          line="$(cat "${f}")"
+          IFS=';' read -r _dummy phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
+          octal="$(printf '%o' "${epoch_field}")"
+          printf ';%s;%s;%s;%s;%s;%s;\n' \
+            "${phone_field}" "${label_field}" "${epoch_field}" "${octal}" "${tag_field}" "${status_field}"
+          found=$((found+1))
+        done < <(find "${UNIVERSE_ROOT}/${phone_filter}" -type f -name '*;universe' 2>/dev/null || true)
+      fi
     fi
   } > "${out}"
 
-  log_info "wrote stack snapshot → ${out}"
+  log_info "wrote stack snapshot → ${out} (universes=${found})"
 }
 
 cmd_stack_up() {
@@ -897,6 +899,51 @@ Right now it does nothing destructive and always exits 0.
 EOF
 }
 
+# --- FLAMES (NEW STUB) ------------------------------------------------------
+
+cmd_flames() {
+  local sub="${1:-status}"
+
+  banner "refold.command flames"
+
+  case "${sub}" in
+    status)
+      cat <<EOF
+Ω-speakers / flames status (stub)
+
+refold.command does not start audio itself yet.
+dlog.command (and your Rust omega_speakers binary) are responsible
+for actual sound generation.
+
+This stub exists so that:
+
+  ${SCRIPT_NAME} flames
+
+returns cleanly with exit code 0.
+
+Future ideas:
+  - ${SCRIPT_NAME} flames up   → launch omega_speakers
+  - ${SCRIPT_NAME} flames down → stop omega_speakers
+  - ${SCRIPT_NAME} flames hz   → write semicolon control files.
+
+EOF
+      ;;
+    *)
+      cat <<EOF
+flames subcommand not yet implemented: ${sub}
+
+Supported (for now):
+
+  ${SCRIPT_NAME} flames
+  ${SCRIPT_NAME} flames status
+
+Both are safe stubs (no side effects) and exit 0.
+
+EOF
+      ;;
+  esac
+}
+
 # --- HELP / MAIN DISPATCH ---------------------------------------------------
 
 show_help() {
@@ -915,6 +962,7 @@ Usage:
   ${SCRIPT_NAME} orbit [phone]
   ${SCRIPT_NAME} cleanup
   ${SCRIPT_NAME} stack-up [phone]
+  ${SCRIPT_NAME} flames [status]
 
 Notes:
   - This script never calls start.command.
@@ -966,6 +1014,9 @@ main() {
       ;;
     stack-up)
       cmd_stack_up "$@"
+      ;;
+    flames)
+      cmd_flames "$@"
       ;;
     *)
       log_error "unknown command: ${cmd}"
