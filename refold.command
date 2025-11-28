@@ -3,21 +3,20 @@
 # refold.command
 #
 # DLOG / Ω-Physics / Kubernetes orchestrator
-# GOLDEN BRICK #4 — “paint + beat”
+# GOLDEN BRICK — “stack-up”
 # -------------------------------------------------------------
 # - start.command is STILL dead. We never touch it.
 # - dlog.command on Desktop is the only launcher we honor.
 #
 # New in this brick:
-#   * paint         → visual, artsy view of universes.
-#   * status extra  → human datetime, base-8 epoch, age.
-#   * beat upgraded → actually syncs YAML + Kubernetes + dlog.command.
+#   * stack-up [phone] → flattens universes into a stack snapshot:
+#       ~/Desktop/dlog/stack/stack;universe
+#     in semicolon format:
+#       ;stack;epoch;<now>;ok;
+#       ;phone;label;epoch;epoch8;tag;state;
 #
-# Existing:
-#   * ping, api, scan
-#   * kube init/apply/status/logs/port-forward/provider/sync
-#   * universe, pair
-#   * orbit (safe stub)
+# Keeps all previous commands:
+#   ping, api, scan, paint, kube, universe, status, pair, beat, orbit, cleanup.
 # -------------------------------------------------------------
 
 set -euo pipefail
@@ -34,6 +33,7 @@ DLOG_ROOT="${DLOG_ROOT:-${DLOG_ROOT_DEFAULT}}"
 DLOG_COMMAND="${DLOG_COMMAND:-${DLOG_COMMAND_DEFAULT}}"
 
 UNIVERSE_ROOT="${UNIVERSE_ROOT:-${DLOG_ROOT}/universe}"
+STACK_ROOT="${STACK_ROOT:-${DLOG_ROOT}/stack}"
 
 KUBE_NAMESPACE_DEFAULT="dlog-universe"
 KUBE_NAMESPACE="${KUBE_NAMESPACE:-${KUBE_NAMESPACE_DEFAULT}}"
@@ -119,7 +119,6 @@ call_dlog() {
 # --- UNIVERSE FILE MAPPING --------------------------------------------------
 # Format (for now):
 #   ;phone;label;epoch;tag;status;
-# You can later extend with Ω segments (O1..O8).
 
 universe_file_path() {
   local phone="$1"
@@ -463,9 +462,9 @@ sync_universe_manifests() {
 
   local f filename label phone
   for f in ${files}; do
-    filename="$(basename "${f}")"              # e.g. vortex;universe
-    label="${filename%%;*}"                   # e.g. vortex
-    phone="$(basename "$(dirname "${f}")")"   # e.g. 9132077554
+    filename="$(basename "${f}")"
+    label="${filename%%;*}"
+    phone="$(basename "$(dirname "${f}")")"
     write_universe_configmap_yaml "${phone}" "${label}"
   done
 }
@@ -516,7 +515,7 @@ cmd_kube() {
       kube_sync_universe
       ;;
     provider)
-      banner "Kubernetes: provider detection"
+      banner "refold.command kube provider"
       detect_kube_provider
       ;;
     help|-h|--help|"")
@@ -524,28 +523,12 @@ cmd_kube() {
       cat <<EOF
 Usage:
   ${SCRIPT_NAME} kube init
-      → Detect provider (kind/minikube/external) and ensure namespace.
-
   ${SCRIPT_NAME} kube apply
-      → Ensure a starter manifest exists, then apply all .yaml files under:
-          ${KUBE_MANIFEST_ROOT}
-
   ${SCRIPT_NAME} kube sync
-      → Convert every universe file into a ConfigMap YAML under:
-          ${KUBE_MANIFEST_ROOT}/universe
-        and, if a cluster is reachable, kubectl apply them.
-
   ${SCRIPT_NAME} kube status
-      → Show pods/services/deployments in namespace: ${KUBE_NAMESPACE}
-
   ${SCRIPT_NAME} kube logs <label_selector>
-      → Tail logs for pods with given label selector (e.g. app=dlog-api).
-
   ${SCRIPT_NAME} kube port-forward <service-name> [localPort] [remotePort]
-      → Forward localhost:localPort to service/service-name:remotePort.
-
   ${SCRIPT_NAME} kube provider
-      → Print detected provider: kind|minikube|external|none
 EOF
       ;;
     *)
@@ -562,6 +545,7 @@ cmd_ping() {
   log_info "Desktop:      ${DESKTOP}"
   log_info "DLOG_ROOT:    ${DLOG_ROOT}"
   log_info "UNIVERSE_ROOT:${UNIVERSE_ROOT}"
+  log_info "STACK_ROOT:   ${STACK_ROOT}"
   log_info "KUBE_NS:      ${KUBE_NAMESPACE}"
   log_info "KUBE_MANIFEST:${KUBE_MANIFEST_ROOT}"
   log_info "DLOG_DOC_URL: ${DLOG_DOC_URL}"
@@ -584,25 +568,16 @@ cmd_api() {
   banner "refold.command api"
 
   cat <<EOF
-API / Universe Endpoints (conceptual; this script just prints them):
+Canonical Ω-spec document:
+  ${DLOG_DOC_URL}
 
-  Canonical Ω-spec document:
-    ${DLOG_DOC_URL}
+GitHub Repos:
+  DLOG / chain / app:        ${DLOG_REPO}
+  Omega container (legacy):  ${OMEGA_CONTAINER_REPO}
 
-  GitHub Repos:
-    DLOG / chain / app:        ${DLOG_REPO}
-    Omega container (legacy):  ${OMEGA_CONTAINER_REPO}
-
-Local Dev Expectations:
-
-  - dlog.command on Desktop is the ONLY launcher we respect now.
-    (start.command is obsolete and should not be used.)
-
-  - refold.command is for:
-      * orchestration,
-      * Kubernetes helper verbs,
-      * simple per-phone/per-label universe snapshots.
-
+refold.command:
+  - Orchestrator for universes, stacks, and Kubernetes sync.
+  - Never calls start.command. Only dlog.command.
 EOF
 }
 
@@ -626,7 +601,6 @@ cmd_universe() {
   echo "------------------------------------------------------"
   cat "${file}"
   echo "------------------------------------------------------"
-  log_info "You can extend this record format to hold Ω segments (O1..O8)."
 }
 
 cmd_status() {
@@ -647,12 +621,11 @@ cmd_status() {
   local _dummy phone_field label_field epoch_field tag_field status_field _rest
   IFS=';' read -r _dummy phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
 
-  local when octal now age
+  local when octal now age age_str
   when="$(epoch_to_datetime "${epoch_field}")"
   octal="$(printf '%o' "${epoch_field}")"
   now="$(date +%s)"
   age=$(( now - epoch_field ))
-  local age_str
   age_str="$(humanize_duration "${age}")"
 
   printf 'Phone : %s\n' "${phone_field}"
@@ -691,35 +664,34 @@ cmd_pair() {
   echo "------------------------------------------------------"
 }
 
-# --- PAINT (NEW) -----------------------------------------------------------
+# --- PAINT ------------------------------------------------------------------
 
 label_symbol() {
   local lbl_lower
   lbl_lower="$(printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]')"
   case "${lbl_lower}" in
-    vortex) printf '●';;
-    comet)  printf '○';;
-    *)      printf '◆';;
+    vortex) echo "●" ;;
+    comet)  echo "○" ;;
+    *)      echo "◆" ;;
   esac
 }
 
 paint_phone() {
   local phone="$1"
-
   local dir="${UNIVERSE_ROOT}/${phone}"
+
   if [ ! -d "${dir}" ]; then
     return 0
   fi
 
-  printf 'Phone %s\n' "${phone}"
-  printf '------------------------------------------------------\n'
+  echo "Phone ${phone}"
+  echo "------------------------------------------------------"
 
   local f
   for f in "${dir}"/*';universe'; do
     [ -f "${f}" ] || continue
-    local line
+    local line _dummy phone_field label_field epoch_field tag_field status_field _rest
     line="$(cat "${f}")"
-    local _dummy phone_field label_field epoch_field tag_field status_field _rest
     IFS=';' read -r _dummy phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
 
     local sym when octal now age age_str
@@ -730,11 +702,10 @@ paint_phone() {
     age=$(( now - epoch_field ))
     age_str="$(humanize_duration "${age}")"
 
-    printf '  [%s] %-7s ── tag=%-6s state=%-4s epoch=%-12s (₈=%s) age=%s ago at %s\n' \
-      "${sym}" "${label_field}" "${tag_field}" "${status_field}" "${epoch_field}" "${octal}" "${age_str}" "${when}"
+    echo "  [${sym}] ${label_field}  tag=${tag_field} state=${status_field} epoch=${epoch_field} (8=${octal}) age=${age_str} ago at ${when}"
   done
 
-  printf '\n'
+  echo
 }
 
 cmd_paint() {
@@ -760,6 +731,79 @@ cmd_paint() {
   fi
 }
 
+# --- STACK-UP (NEW) ---------------------------------------------------------
+
+build_stack_snapshot() {
+  local phone_filter="${1:-}"
+
+  ensure_dir "${STACK_ROOT}"
+  ensure_dir "${UNIVERSE_ROOT}"
+
+  local out="${STACK_ROOT}/stack;universe"
+  local now_epoch
+  now_epoch="$(date +%s)"
+
+  # Collect files (optionally filtered to a single phone)
+  local files
+  if [ -z "${phone_filter}" ]; then
+    files="$(find "${UNIVERSE_ROOT}" -type f -name '*;universe' 2>/dev/null || true)"
+  else
+    if [ -d "${UNIVERSE_ROOT}/${phone_filter}" ]; then
+      files="$(find "${UNIVERSE_ROOT}/${phone_filter}" -type f -name '*;universe' 2>/dev/null || true)"
+    else
+      files=""
+    fi
+  fi
+
+  {
+    # Header line: current stack epoch
+    printf ';stack;epoch;%s;ok;\n' "${now_epoch}"
+
+    if [ -n "${files}" ]; then
+      local f line _dummy phone_field label_field epoch_field tag_field status_field _rest octal
+      for f in ${files}; do
+        line="$(cat "${f}")"
+        IFS=';' read -r _dummy phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
+        octal="$(printf '%o' "${epoch_field}")"
+        # One line per universe:
+        # ;phone;label;epoch;epoch8;tag;status;
+        printf ';%s;%s;%s;%s;%s;%s;\n' \
+          "${phone_field}" "${label_field}" "${epoch_field}" "${octal}" "${tag_field}" "${status_field}"
+      done
+    fi
+  } > "${out}"
+
+  log_info "wrote stack snapshot → ${out}"
+}
+
+cmd_stack_up() {
+  local phone="${1:-}"
+
+  banner "refold.command stack-up"
+
+  if [ -z "${phone}" ]; then
+    build_stack_snapshot
+  else
+    build_stack_snapshot "${phone}"
+  fi
+
+  cat <<EOF
+Stack-up complete.
+
+The Ω-stack snapshot now lives at:
+
+  ${STACK_ROOT}/stack;universe
+
+Format:
+  ;stack;epoch;<nowEpoch>;ok;
+  ;phone;label;epoch;epoch8;tag;status;
+
+dlog.command (and any Ω-physics engines) can read this file
+as the single "flattened" view of all universes.
+
+EOF
+}
+
 # --- BEAT / ORBIT -----------------------------------------------------------
 
 cmd_beat() {
@@ -780,7 +824,10 @@ cmd_beat() {
     log_warn "Skipping kubectl apply during beat; no cluster reachable."
   fi
 
-  log_info "3) (Optional) Notifying dlog.command with 'beat'"
+  log_info "3) Updating stack snapshot (stack-up)"
+  build_stack_snapshot
+
+  log_info "4) (Optional) Notifying dlog.command with 'beat'"
   if ensure_dlog_command; then
     if ! call_dlog beat; then
       log_warn "dlog.command beat exited non-zero (or not implemented)."
@@ -796,6 +843,7 @@ Beat complete.
 This beat:
   - Re-synced all universes into kube/universe/*.yaml
   - Applied them to Kubernetes if a cluster is reachable
+  - Updated the Ω-stack snapshot at ${STACK_ROOT}/stack;universe
   - Poked dlog.command with "beat" if the new launcher is available
 
 EOF
@@ -808,11 +856,11 @@ cmd_orbit() {
 
   if [ -z "${phone}" ]; then
     cat <<EOF
-orbit currently wants an optional phone number, for example:
+orbit can take an optional phone number, for example:
 
   ${SCRIPT_NAME} orbit 9132077554
 
-For now it's a visualization hint; paint is the more detailed output.
+For now it's a simple hint; use 'paint' for full visuals.
 EOF
     return 0
   fi
@@ -820,14 +868,31 @@ EOF
   cat <<EOF
 Orbit visualization stub for phone=${phone}
 
-Imagine:
-  - Each label (vortex, comet, fun, land...) as a satellite.
-  - Distances encoded by balance magnitude.
-  - Kubernetes Deployments as stable Lagrange points.
-
 Use:
   ${SCRIPT_NAME} paint ${phone}
-to see the detailed lines for this phone.
+to see detailed lines for this phone.
+
+EOF
+}
+
+# --- CLEANUP (STUB) ---------------------------------------------------------
+
+cmd_cleanup() {
+  banner "refold.command cleanup"
+
+  cat <<EOF
+cleanup is currently a calm stub.
+
+It exists so dlog.command can safely call:
+
+  ${SCRIPT_NAME} cleanup
+
+Future ideas:
+  - remove temporary artifacts,
+  - rotate logs,
+  - compact / archive old universe snapshots.
+
+Right now it does nothing destructive and always exits 0.
 
 EOF
 }
@@ -839,41 +904,22 @@ show_help() {
   cat <<EOF
 Usage:
   ${SCRIPT_NAME} ping
-      → Quick health check (paths, dlog.command presence, Kube provider).
-
   ${SCRIPT_NAME} api
-      → Print canonical URLs + dev expectations.
-
   ${SCRIPT_NAME} scan
-      → List all universe files in a table (phone/label/epoch/tag/state).
-
   ${SCRIPT_NAME} paint [phone]
-      → Pretty, artsy rendering of universes for all phones or a single phone.
-
   ${SCRIPT_NAME} kube <subcommand> [args...]
-      → Kubernetes helper:
-           init, apply, status, logs, port-forward, provider, sync
-
   ${SCRIPT_NAME} universe <phone> <label>
-      → Ensure a universe snapshot exists and print its contents.
-
   ${SCRIPT_NAME} status <phone> <label>
-      → Pretty-print a universe (with datetime, base-8 epoch, age).
-
   ${SCRIPT_NAME} pair <phone>
-      → Seed both vortex + comet universes for the given phone in one shot.
-
   ${SCRIPT_NAME} beat
-      → Heartbeat: sync YAML, apply to Kube (if reachable), ping dlog.command.
-
   ${SCRIPT_NAME} orbit [phone]
-      → Simple orbit hint; pair with 'paint' for full visuals.
+  ${SCRIPT_NAME} cleanup
+  ${SCRIPT_NAME} stack-up [phone]
 
 Notes:
   - This script never calls start.command.
   - dlog.command is assumed to live on the Desktop and is the
-    new canonical launcher. You can change it with \$DLOG_COMMAND.
-
+    new canonical launcher (override via \$DLOG_COMMAND).
 EOF
 }
 
@@ -914,6 +960,12 @@ main() {
       ;;
     orbit)
       cmd_orbit "$@"
+      ;;
+    cleanup)
+      cmd_cleanup "$@"
+      ;;
+    stack-up)
+      cmd_stack_up "$@"
       ;;
     *)
       log_error "unknown command: ${cmd}"
