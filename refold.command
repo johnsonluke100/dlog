@@ -3,34 +3,39 @@
 # refold.command
 #
 # DLOG / Ω-Physics / Kubernetes orchestrator
-# GOLDEN BRICK — “9∞ master root + flames control + resilient stack-up”
-# -------------------------------------------------------------
-# - start.command is STILL dead. We never touch it.
-# - dlog.command on Desktop is the only launcher we honor.
+# GOLDEN BRICK — “universes + stack + 9∞ root + flames + Ω-dashboard + Ω-sky (manifest + timeline)”
 #
-# New / changed in this brick:
-#   * 9∞ master root:
-#       - Uses STACK + FLAMES to build a hash into 8 Ω segments.
-#       - Lives under: ${OMEGA_INF_ROOT}/;∞;∞;∞;∞;∞;∞;∞;∞;∞;
-#       - Auto-updated on every `beat`.
-#       - Manual: `refold.command root`
-#   * stack-up:
-#       - If called with a phone that has no universes, it falls back
-#         to "all universes" instead of writing an empty stack.
-#   * flames:
-#       - flames           → status stub.
-#       - flames up        → write default 8888 Hz 4-flame control.
-#       - flames down      → write "down" control.
-#       - flames hz <freq> → write control with custom frequency.
+# Ground rules:
+#   - start.command is dead. We never touch it.
+#   - dlog.command on Desktop is the canonical launcher.
+#   - We speak in semicolons and base-8, not base-10.
+#
+# Canon:
+#   DLOG spec: https://docs.google.com/document/d/e/2PACX-1vShJ-OHsxJjf13YISSM7532zs0mHbrsvkSK73nHnK18rZmpysHC6B1RIMvGTALy0RIo1R1HRAyewCwR/pub
 #
 # Commands:
-#   ping, api, scan, paint, kube, universe, status, pair,
-#   beat, orbit, cleanup, stack-up, root, flames.
-# -------------------------------------------------------------
+#   ping          → show paths, doc URL, repo
+#   api           → print canonical URLs + expectations
+#   scan          → enumerate universes
+#   paint [phone] → orbit view (vortex ● / comet ○)
+#   kube ...      → init/apply/sync/status/logs/port-forward
+#   universe p l  → ensure universe snapshot exists
+#   status p l    → pretty-print one universe
+#   pair p        → seed vortex + comet
+#   beat          → 1 beat = sync YAML + stack + 9∞ + dashboard + sky + poke dlog
+#   orbit [phone] → stub orbit hint
+#   cleanup       → safe stub
+#   stack-up [p]  → flattened Ω stack
+#   root          → 9∞ master root writer
+#   dashboard     → Ω-dashboard snapshot
+#   flames ...    → control file (up/down/hz) for audio engines
+#   sky ...       → Ω-sky manifest + timeline (fluid slideshow loop)
+#
+# All golden bricks are encoded here so you don’t have to touch any other files. ∞🌀
 
 set -euo pipefail
 
-# --- BASIC CONSTANTS ---------------------------------------------------------
+# --- BASIC CONSTANTS --------------------------------------------------------
 
 SCRIPT_NAME="$(basename "${0}")"
 
@@ -130,7 +135,7 @@ call_dlog() {
 }
 
 # --- UNIVERSE FILE MAPPING --------------------------------------------------
-# Format (for now):
+# Format:
 #   ;phone;label;epoch;tag;status;
 
 universe_file_path() {
@@ -173,13 +178,13 @@ read_universe_or_die() {
   cat "${file}"
 }
 
-# --- TIME & SCALE HELPERS (HUMAN + BASE-8) ---------------------------------
+# --- TIME & SCALE HELPERS ---------------------------------------------------
 
 epoch_to_datetime() {
   local epoch="$1"
   if date -r "${epoch}" '+%Y-%m-%d %H:%M:%S' >/dev/null 2>&1; then
     date -r "${epoch}" '+%Y-%m-%d %H:%M:%S'
-  elif date -d "@${epoch}" '+%Y-%m-%d %H:%M:%S' >/devnull 2>&1; then
+  elif date -d "@${epoch}" '+%Y-%m-%d %H:%M:%S' >/dev/null 2>&1; then
     date -d "@${epoch}" '+%Y-%m-%d %H:%M:%S'
   else
     printf 'epoch:%s\n' "${epoch}"
@@ -194,7 +199,7 @@ humanize_duration() {
   local d h m s
   d=$(( total / 86400 ))
   h=$(( (total % 86400) / 3600 ))
-  m=$(( (total % 86400) / 60 ))
+  m=$(( (total % 3600) / 60 ))
   s=$(( total % 60 ))
 
   local out=""
@@ -225,8 +230,9 @@ cmd_scan() {
   printf '%-12s %-12s %-12s %-10s %-10s %s\n' \
     "------------" "------------" "------------" "----------" "----------" "----------------"
 
-  local f line phone_field label_field epoch_field tag_field status_field _rest
+  local f line phone_field label_field epoch_field tag_field status_field _rest _
   for f in ${files}; do
+    [ -f "${f}" ] || continue
     line="$(cat "${f}")"
     IFS=';' read -r _ phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
     printf '%-12s %-12s %-12s %-10s %-10s %s\n' \
@@ -360,8 +366,70 @@ YAML
   fi
 }
 
+write_universe_configmap_yaml() {
+  local phone="$1"
+  local label="$2"
+
+  local file
+  file="$(universe_file_path "${phone}" "${label}")"
+  if [ ! -f "${file}" ]; then
+    log_warn "universe file missing for phone=${phone} label=${label}, skipping YAML sync."
+    return 0
+  fi
+
+  local line
+  line="$(cat "${file}")"
+
+  local _ phone_field label_field epoch_field tag_field status_field _rest
+  IFS=';' read -r _ phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
+
+  ensure_dir "${KUBE_MANIFEST_ROOT}/universe"
+  local yaml="${KUBE_MANIFEST_ROOT}/universe/${phone_field}-${label_field}.yaml"
+
+  local raw_escaped="${line//\"/\\\"}"
+
+  cat > "${yaml}" <<EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dlog-${phone_field}-${label_field}
+  namespace: ${KUBE_NAMESPACE}
+data:
+  phone: "${phone_field}"
+  label: "${label_field}"
+  epoch: "${epoch_field}"
+  tag: "${tag_field}"
+  status: "${status_field}"
+  raw: "${raw_escaped}"
+EOF
+
+  log_info "wrote universe configmap manifest → ${yaml}"
+}
+
+sync_universe_manifests() {
+  ensure_dir "${UNIVERSE_ROOT}"
+  ensure_dir "${KUBE_MANIFEST_ROOT}/universe"
+
+  local files
+  files="$(find "${UNIVERSE_ROOT}" -type f -name '*;universe' 2>/dev/null || true)"
+
+  if [ -z "${files}" ]; then
+    log_warn "No universe files found under ${UNIVERSE_ROOT} to sync."
+    return 0
+  fi
+
+  local f filename label phone
+  for f in ${files}; do
+    [ -f "${f}" ] || continue
+    filename="$(basename "${f}")"
+    label="${filename%%;*}"
+    phone="$(basename "$(dirname "${f}")")"
+    write_universe_configmap_yaml "${phone}" "${label}"
+  done
+}
+
 kube_apply_manifests() {
-  kube_write_starter_manifest_if_missing()
+  kube_write_starter_manifest_if_missing
 
   if ! kube_check_cluster; then
     log_warn "Cluster not reachable; skipping kubectl apply for now."
@@ -419,91 +487,6 @@ kube_port_forward() {
   kubectl port-forward -n "${KUBE_NAMESPACE}" "svc/${svc}" "${local_port}:${remote_port}"
 }
 
-# --- UNIVERSE → CONFIGMAP YAML ---------------------------------------------
-
-write_universe_configmap_yaml() {
-  local phone="$1"
-  local label="$2"
-
-  local file
-  file="$(universe_file_path "${phone}" "${label}")"
-  if [ ! -f "${file}" ]; then
-    log_warn "universe file missing for phone=${phone} label=${label}, skipping YAML sync."
-    return 0
-  fi
-
-  local line
-  line="$(cat "${file}")"
-
-  local _dummy phone_field label_field epoch_field tag_field status_field _rest
-  IFS=';' read -r _dummy phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
-
-  ensure_dir "${KUBE_MANIFEST_ROOT}/universe"
-  local yaml="${KUBE_MANIFEST_ROOT}/universe/${phone_field}-${label_field}.yaml"
-
-  local raw_escaped="${line//\"/\\\"}"
-
-  cat > "${yaml}" <<EOF
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: dlog-${phone_field}-${label_field}
-  namespace: ${KUBE_NAMESPACE}
-data:
-  phone: "${phone_field}"
-  label: "${label_field}"
-  epoch: "${epoch_field}"
-  tag: "${tag_field}"
-  status: "${status_field}"
-  raw: "${raw_escaped}"
-EOF
-
-  log_info "wrote universe configmap manifest → ${yaml}"
-}
-
-sync_universe_manifests() {
-  ensure_dir "${UNIVERSE_ROOT}"
-  ensure_dir "${KUBE_MANIFEST_ROOT}/universe"
-
-  local files
-  files="$(find "${UNIVERSE_ROOT}" -type f -name '*;universe' 2>/dev/null || true)"
-
-  if [ -z "${files}" ]; then
-    log_warn "No universe files found under ${UNIVERSE_ROOT} to sync."
-    return 0
-  fi
-
-  local f filename label phone
-  for f in ${files}; do
-    filename="$(basename "${f}")"
-    label="${filename%%;*}"
-    phone="$(basename "$(dirname "${f}")")"
-    write_universe_configmap_yaml "${phone}" "${label}"
-  done
-}
-
-kube_sync_universe() {
-  banner "Kubernetes: syncing universes → ConfigMap manifests"
-
-  sync_universe_manifests
-
-  local universe_dir="${KUBE_MANIFEST_ROOT}/universe"
-
-  if ! ls "${universe_dir}"/*.yaml >/dev/null 2>&1; then
-    log_warn "No universe YAML manifests found under ${universe_dir}."
-    return 0
-  fi
-
-  if ! kube_check_cluster; then
-    log_warn "Cluster not reachable; only wrote YAML manifests."
-    log_warn "Once your cluster is up, run: ${SCRIPT_NAME} kube sync again."
-    return 0
-  fi
-
-  log_info "Applying all universe ConfigMaps from: ${universe_dir}"
-  kubectl apply -n "${KUBE_NAMESPACE}" -f "${universe_dir}"
-}
-
 cmd_kube() {
   local subcommand="${1:-help}"
   shift || true
@@ -525,7 +508,9 @@ cmd_kube() {
       kube_port_forward "$@"
       ;;
     sync)
-      kube_sync_universe
+      banner "Kubernetes: syncing universes → ConfigMap manifests"
+      sync_universe_manifests
+      kube_apply_manifests
       ;;
     provider)
       banner "refold.command kube provider"
@@ -591,7 +576,7 @@ GitHub Repos:
   Omega container (legacy):  ${OMEGA_CONTAINER_REPO}
 
 refold.command:
-  - Orchestrator for universes, stacks, flames, and Kubernetes sync.
+  - Orchestrator for universes, stacks, flames, 9∞ root, Ω-sky, and Kubernetes sync.
   - Never calls start.command. Only dlog.command.
 EOF
 }
@@ -633,8 +618,8 @@ cmd_status() {
   local line
   line="$(cat "${file}")"
 
-  local _dummy phone_field label_field epoch_field tag_field status_field _rest
-  IFS=';' read -r _dummy phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
+  local _ phone_field label_field epoch_field tag_field status_field _rest
+  IFS=';' read -r _ phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
 
   local when octal now age age_str
   when="$(epoch_to_datetime "${epoch_field}")"
@@ -679,7 +664,7 @@ cmd_pair() {
   echo "------------------------------------------------------"
 }
 
-# --- PAINT ------------------------------------------------------------------
+# --- PAINT (UNIVERSE ORBITS) -----------------------------------------------
 
 label_symbol() {
   local lbl_lower
@@ -702,12 +687,11 @@ paint_phone() {
   echo "Phone ${phone}"
   echo "------------------------------------------------------"
 
-  local f
+  local f line _ phone_field label_field epoch_field tag_field status_field _rest
   for f in "${dir}"/*';universe'; do
     [ -f "${f}" ] || continue
-    local line _dummy phone_field label_field epoch_field tag_field status_field _rest
     line="$(cat "${f}")"
-    IFS=';' read -r _dummy phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
+    IFS=';' read -r _ phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
 
     local sym when octal now age age_str
     sym="$(label_symbol "${label_field}")"
@@ -746,7 +730,7 @@ cmd_paint() {
   fi
 }
 
-# --- STACK-UP (with fallback) ----------------------------------------------
+# --- STACK-UP ---------------------------------------------------------------
 
 build_stack_snapshot() {
   local phone_filter="${1:-}"
@@ -773,11 +757,11 @@ build_stack_snapshot() {
     printf ';stack;epoch;%s;ok;\n' "${now_epoch}"
 
     if [ -n "${files}" ]; then
-      local f line _dummy phone_field label_field epoch_field tag_field status_field _rest octal
+      local f line _ phone_field label_field epoch_field tag_field status_field _rest octal
       for f in ${files}; do
         [ -f "${f}" ] || continue
         line="$(cat "${f}")"
-        IFS=';' read -r _dummy phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
+        IFS=';' read -r _ phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
         octal="$(printf '%o' "${epoch_field}")"
         printf ';%s;%s;%s;%s;%s;%s;\n' \
           "${phone_field}" "${label_field}" "${epoch_field}" "${octal}" "${tag_field}" "${status_field}"
@@ -881,6 +865,288 @@ cmd_root() {
   fi
 }
 
+# --- Ω DASHBOARD WRITER -----------------------------------------------------
+
+write_dashboard_snapshot() {
+  ensure_dir "${DLOG_ROOT}/dashboard"
+
+  local dash="${DLOG_ROOT}/dashboard/dashboard;status"
+  local now_epoch
+  now_epoch="$(date +%s)"
+
+  local stack_file="${STACK_ROOT}/stack;universe"
+  local stack_epoch="0"
+
+  if [ -f "${stack_file}" ]; then
+    local line _k1 _k2 _k3 _rest
+    line="$(head -n1 "${stack_file}" || true)"
+    IFS=';' read -r _k1 _k2 _k3 stack_epoch _rest <<< "${line}"
+  fi
+
+  local root_file="${OMEGA_INF_ROOT}/;∞;∞;∞;∞;∞;∞;∞;∞;∞;"
+  local O1 O2 O3 O4 O5 O6 O7 O8
+  local O1_8 O2_8 O3_8 O4_8 O5_8 O6_8 O7_8 O8_8
+
+  O1="00000000"; O2="00000000"; O3="00000000"; O4="00000000"
+  O5="00000000"; O6="00000000"; O7="00000000"; O8="00000000"
+  O1_8="0"; O2_8="0"; O3_8="0"; O4_8="0"; O5_8="0"; O6_8="0"; O7_8="0"; O8_8="0"
+
+  if [ -f "${root_file}" ]; then
+    local rline _ a b c d e f g h i
+    rline="$(cat "${root_file}")"
+    IFS=';' read -r _ a b c d e f g h i O1 O2 O3 O4 O5 O6 O7 O8 _ <<< "${rline}"
+    O1="${O1:-00000000}"
+    O2="${O2:-00000000}"
+    O3="${O3:-00000000}"
+    O4="${O4:-00000000}"
+    O5="${O5:-00000000}"
+    O6="${O6:-00000000}"
+    O7="${O7:-00000000}"
+    O8="${O8:-00000000}"
+
+    O1_8="$(printf '%o' "0x${O1}" 2>/dev/null || echo 0)"
+    O2_8="$(printf '%o' "0x${O2}" 2>/dev/null || echo 0)"
+    O3_8="$(printf '%o' "0x${O3}" 2>/dev/null || echo 0)"
+    O4_8="$(printf '%o' "0x${O4}" 2>/dev/null || echo 0)"
+    O5_8="$(printf '%o' "0x${O5}" 2>/dev/null || echo 0)"
+    O6_8="$(printf '%o' "0x${O6}" 2>/dev/null || echo 0)"
+    O7_8="$(printf '%o' "0x${O7}" 2>/dev/null || echo 0)"
+    O8_8="$(printf '%o' "0x${O8}" 2>/dev/null || echo 0)"
+  fi
+
+  local flames_file="${DLOG_ROOT}/flames/flames;control"
+  local flames_mode="none"
+  local flames_epoch="0"
+  local flames_hz="0"
+
+  if [ -f "${flames_file}" ]; then
+    local fline _x1 _x2 _x3 _rest
+    fline="$(head -n1 "${flames_file}" || true)"
+    IFS=';' read -r _x1 _x2 _x3 flames_epoch flames_mode _rest <<< "${fline}"
+    flames_mode="${flames_mode:-none}"
+    flames_epoch="${flames_epoch:-0}"
+
+    local oline
+    oline="$(grep '^;omega;hz;' "${flames_file}" 2>/dev/null || true)"
+    if [ -n "${oline}" ]; then
+      # Example: ;omega;hz;7777;cpu=heart;gpu=brain;flames;4;
+      local _s0 _tag _key _val _rest2
+      IFS=';' read -r _s0 _tag _key _val _rest2 <<< "${oline}"
+      flames_hz="${_val:-0}"
+    fi
+  fi
+
+  {
+    printf ';dashboard;epoch;%s;ok;\n' "${now_epoch}"
+    printf ';stack;epoch;%s;\n' "${stack_epoch}"
+    printf ';root;O1;%s;O1_8;%s;\n' "${O1}" "${O1_8}"
+    printf ';root;O2;%s;O2_8;%s;\n' "${O2}" "${O2_8}"
+    printf ';root;O3;%s;O3_8;%s;\n' "${O3}" "${O3_8}"
+    printf ';root;O4;%s;O4_8;%s;\n' "${O4}" "${O4_8}"
+    printf ';root;O5;%s;O5_8;%s;\n' "${O5}" "${O5_8}"
+    printf ';root;O6;%s;O6_8;%s;\n' "${O6}" "${O6_8}"
+    printf ';root;O7;%s;O7_8;%s;\n' "${O7}" "${O7_8}"
+    printf ';root;O8;%s;O8_8;%s;\n' "${O8}" "${O8_8}"
+    printf ';flames;mode;%s;epoch;%s;hz;%s;\n' "${flames_mode}" "${flames_epoch}" "${flames_hz}"
+  } > "${dash}"
+
+  log_info "wrote Ω-dashboard snapshot → ${dash}"
+}
+
+cmd_dashboard() {
+  banner "refold.command dashboard"
+
+  write_dashboard_snapshot
+
+  local dash="${DLOG_ROOT}/dashboard/dashboard;status"
+  if [ -f "${dash}" ]; then
+    printf 'Ω-dashboard contents:\n\n'
+    cat "${dash}"
+    echo
+  else
+    log_warn "dashboard;status not found at: ${dash}"
+  fi
+}
+
+# --- Ω-SKY MANIFEST ---------------------------------------------------------
+
+write_sky_manifest() {
+  local sky_root="${SKY_ROOT:-${DLOG_ROOT}/sky}"
+  local sky_src="${SKY_SRC:-${sky_root}/src}"
+
+  ensure_dir "${sky_root}"
+
+  local manifest="${sky_root}/sky;manifest"
+  local now_epoch
+  now_epoch="$(date +%s)"
+
+  local root_file="${OMEGA_INF_ROOT}/;∞;∞;∞;∞;∞;∞;∞;∞;∞;"
+  local O1 O2 O3 O4 O5 O6 O7 O8
+
+  O1="00000000"; O2="00000000"; O3="00000000"; O4="00000000"
+  O5="00000000"; O6="00000000"; O7="00000000"; O8="00000000"
+
+  if [ -f "${root_file}" ]; then
+    local rline _ a b c d e f g h i
+    rline="$(cat "${root_file}")"
+    IFS=';' read -r _ a b c d e f g h i O1 O2 O3 O4 O5 O6 O7 O8 _ <<< "${rline}"
+    O1="${O1:-00000000}"
+    O2="${O2:-00000000}"
+    O3="${O3:-00000000}"
+    O4="${O4:-00000000}"
+    O5="${O5:-00000000}"
+    O6="${O6:-00000000}"
+    O7="${O7:-00000000}"
+    O8="${O8:-00000000}"
+  fi
+
+  local images=()
+  local idx ext candidate found
+  for idx in 1 2 3 4 5 6 7 8; do
+    found=0
+    for ext in jpg jpeg png JPG JPEG PNG; do
+      candidate="${sky_src}/${idx}.${ext}"
+      if [ -f "${candidate}" ]; then
+        images+=("$(basename "${candidate}")")
+        found=1
+        break
+      fi
+    done
+    if [ "${found}" -eq 0 ]; then
+      images+=("missing")
+    fi
+  done
+
+  local segments=( "${O1}" "${O2}" "${O3}" "${O4}" "${O5}" "${O6}" "${O7}" "${O8}" )
+
+  {
+    printf ';sky;manifest;epoch;%s;ok;\n' "${now_epoch}"
+    printf ';sky;root_file;%s;\n' "${root_file}"
+    printf ';sky;src;%s;\n' "${sky_src}"
+
+    local i ep file seg hex
+    for i in 0 1 2 3 4 5 6 7; do
+      ep=$((i+1))
+      file="${images[$i]}"
+      seg="O${ep}"
+      hex="${segments[$i]}"
+      printf ';episode;%d;file;%s;segment;%s;hex;%s;\n' "${ep}" "${file}" "${seg}" "${hex}"
+    done
+  } > "${manifest}"
+
+  log_info "wrote Ω-sky manifest → ${manifest}"
+}
+
+# --- Ω-SKY TIMELINE (FLUID CROSSFADE RING) ---------------------------------
+
+write_sky_timeline() {
+  local sky_root="${SKY_ROOT:-${DLOG_ROOT}/sky}"
+  local sky_src="${SKY_SRC:-${sky_root}/src}"
+
+  ensure_dir "${sky_root}"
+
+  local timeline="${sky_root}/sky;timeline"
+  local now_epoch
+  now_epoch="$(date +%s)"
+
+  # Pull current omega_hz from flames control (if present).
+  local flames_file="${DLOG_ROOT}/flames/flames;control"
+  local omega_hz="0"
+
+  if [ -f "${flames_file}" ]; then
+    local oline
+    oline="$(grep '^;omega;hz;' "${flames_file}" 2>/dev/null || true)"
+    if [ -n "${oline}" ]; then
+      # Example line:
+      #   ;omega;hz;7777;cpu=heart;gpu=brain;flames;4;
+      local _s0 _tag _key _val _rest
+      IFS=';' read -r _s0 _tag _key _val _rest <<< "${oline}"
+      omega_hz="${_val:-0}"
+    fi
+  fi
+
+  # We assume episodes 1..8 exist conceptually.
+  local episodes=()
+  local idx
+  for idx in 1 2 3 4 5 6 7 8; do
+    episodes+=("${idx}")
+  done
+  local count=${#episodes[@]}
+  local loop="true"
+
+  {
+    printf ';sky;timeline;epoch;%s;ok;\n' "${now_epoch}"
+    printf ';timeline;episodes;%s;omega_hz;%s;loop;%s;\n' "${count}" "${omega_hz}" "${loop}"
+
+    local i from to
+    for i in "${!episodes[@]}"; do
+      from="${episodes[$i]}"
+      if [ "$((i+1))" -lt "${count}" ]; then
+        to="${episodes[$((i+1))]}"
+      else
+        to="${episodes[0]}"
+      fi
+
+      # Crossfade with 64 micro-steps and an 8-beat hold at full brightness
+      printf ';transition;from;%s;to;%s;mode;crossfade;steps;64;hold_beats;8;\n' \
+        "${from}" "${to}"
+    done
+  } > "${timeline}"
+
+  log_info "wrote Ω-sky timeline → ${timeline}"
+}
+
+cmd_sky() {
+  local sub="${1:-status}"
+
+  banner "refold.command sky"
+
+  case "${sub}" in
+    status|manifest|sync|timeline)
+      write_sky_manifest
+      write_sky_timeline
+
+      local manifest="${DLOG_ROOT}/sky/sky;manifest"
+      local timeline="${DLOG_ROOT}/sky/sky;timeline"
+
+      if [ -f "${manifest}" ]; then
+        printf 'Ω-sky manifest contents:\n\n'
+        cat "${manifest}"
+        echo
+      else
+        log_warn "sky;manifest not found at: ${manifest}"
+      fi
+
+      if [ -f "${timeline}" ]; then
+        printf 'Ω-sky timeline contents:\n\n'
+        cat "${timeline}"
+        echo
+      else
+        log_warn "sky;timeline not found at: ${timeline}"
+      fi
+      ;;
+    *)
+      cat <<EOF
+Usage:
+  ${SCRIPT_NAME} sky           → regenerate + print Ω-sky manifest + timeline
+  ${SCRIPT_NAME} sky status    → same as above
+  ${SCRIPT_NAME} sky manifest  → same as above
+  ${SCRIPT_NAME} sky sync      → same as above
+  ${SCRIPT_NAME} sky timeline  → same as above
+
+Semantics:
+  - Looks for images under: \${SKY_SRC:-\${DLOG_ROOT}/sky/src}
+  - Uses 1..8 .jpg/.jpeg/.png files as episodes 1..8.
+  - Binds each episode to Ω segments O1..O8 from the 9∞ master root.
+  - Builds a smooth crossfade loop 1→2→…→8→1
+    with 64-step transitions and 8-beat holds,
+    tuned to \`omega_hz\` from flames control.
+
+EOF
+      ;;
+  esac
+}
+
 # --- BEAT / ORBIT -----------------------------------------------------------
 
 cmd_beat() {
@@ -907,7 +1173,16 @@ cmd_beat() {
   log_info "4) Updating 9∞ master root"
   write_nine_inf_root
 
-  log_info "5) (Optional) Notifying dlog.command with 'beat'"
+  log_info "5) Updating Ω-dashboard snapshot"
+  write_dashboard_snapshot
+
+  log_info "6) Updating Ω-sky manifest"
+  write_sky_manifest
+
+  log_info "7) Updating Ω-sky timeline"
+  write_sky_timeline
+
+  log_info "8) (Optional) Notifying dlog.command with 'beat'"
   if ensure_dlog_command; then
     if ! call_dlog beat; then
       log_warn "dlog.command beat exited non-zero (or not implemented)."
@@ -925,6 +1200,9 @@ This beat:
   - Applied them to Kubernetes if a cluster is reachable
   - Updated the Ω-stack snapshot at ${STACK_ROOT}/stack;universe
   - Updated the 9∞ master root under ${OMEGA_INF_ROOT}
+  - Updated the Ω-dashboard at ${DLOG_ROOT}/dashboard/dashboard;status
+  - Updated the Ω-sky manifest at ${DLOG_ROOT}/sky/sky;manifest
+  - Updated the Ω-sky timeline at ${DLOG_ROOT}/sky/sky;timeline
   - Poked dlog.command with "beat" if the new launcher is available
 
 EOF
@@ -1112,7 +1390,9 @@ Usage:
   ${SCRIPT_NAME} cleanup
   ${SCRIPT_NAME} stack-up [phone]
   ${SCRIPT_NAME} root
+  ${SCRIPT_NAME} dashboard
   ${SCRIPT_NAME} flames [status|up|down|hz <freq>]
+  ${SCRIPT_NAME} sky [status|manifest|sync|timeline]
 
 Notes:
   - This script never calls start.command.
@@ -1168,8 +1448,14 @@ main() {
     root)
       cmd_root "$@"
       ;;
+    dashboard)
+      cmd_dashboard "$@"
+      ;;
     flames)
       cmd_flames "$@"
+      ;;
+    sky)
+      cmd_sky "$@"
       ;;
     *)
       log_error "unknown command: ${cmd}"
