@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dlog-9132077554-comet
+  namespace: dlog-universe
+data:
+  phone: "9132077554"
+  label: "comet"
+  epoch: "1764312232"
+  tag: "seed"
+  status: "ok"
+  raw: ";9132077554;comet;1764312232;seed;ok;"

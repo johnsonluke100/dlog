@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dlog-universe
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dlog-hello
+  namespace: dlog-universe
+data:
+  message: "Welcome to the DLOG Universe (hello-universe.yaml)."

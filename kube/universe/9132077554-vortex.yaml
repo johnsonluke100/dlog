@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dlog-9132077554-vortex
+  namespace: dlog-universe
+data:
+  phone: "9132077554"
+  label: "vortex"
+  epoch: "1764312094"
+  tag: "seed"
+  status: "ok"
+  raw: ";9132077554;vortex;1764312094;seed;ok;"

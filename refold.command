@@ -3,19 +3,22 @@
 # refold.command
 #
 # DLOG / Ω-Physics / Kubernetes orchestrator
+# GOLDEN BRICK #3
 # -------------------------------------------------------------
-# This script is the “refolder”:
-# - It NEVER calls start.command (old Python launcher).
-# - It only recognizes dlog.command as the canonical launcher.
-# - It knows how to talk about:
-#     * ping         → quick health check of the dev universe
-#     * api          → local API + URLs overview
-#     * kube         → Kubernetes helpers (kind / minikube / external)
-#     * universe     → per-phone/per-label universe stubs
-#     * status       → pretty-print universe snapshots
-#     * beat/orbit   → safe stubs (no more parse errors)
+# - start.command is STILL dead. We never touch it.
+# - dlog.command on Desktop is the only launcher we honor.
 #
-# You can extend this file indefinitely. Just keep appending bricks.
+# New in this brick:
+#   * scan      → list all universes (phone + label + epoch + tag + state).
+#   * kube sync → turn every universe into a Kubernetes ConfigMap manifest
+#                 under dlog/kube/universe/ and, if a cluster exists,
+#                 kubectl apply them.
+#
+# Existing:
+#   * ping, api
+#   * kube init/apply/status/logs/port-forward/provider
+#   * universe, status, pair
+#   * beat, orbit (safe stubs)
 # -------------------------------------------------------------
 
 set -euo pipefail
@@ -24,24 +27,19 @@ set -euo pipefail
 
 SCRIPT_NAME="$(basename "${0}")"
 
-# Desktop assumptions for this Mac:
 DESKTOP="${HOME}/Desktop"
 DLOG_ROOT_DEFAULT="${DESKTOP}/dlog"
 DLOG_COMMAND_DEFAULT="${DESKTOP}/dlog.command"
 
-# Allow overrides via env if you want:
 DLOG_ROOT="${DLOG_ROOT:-${DLOG_ROOT_DEFAULT}}"
 DLOG_COMMAND="${DLOG_COMMAND:-${DLOG_COMMAND_DEFAULT}}"
 
-# Local universe storage (pure text, no DB, just files)
 UNIVERSE_ROOT="${UNIVERSE_ROOT:-${DLOG_ROOT}/universe}"
 
-# Kubernetes defaults
 KUBE_NAMESPACE_DEFAULT="dlog-universe"
 KUBE_NAMESPACE="${KUBE_NAMESPACE:-${KUBE_NAMESPACE_DEFAULT}}"
 KUBE_MANIFEST_ROOT="${KUBE_MANIFEST_ROOT:-${DLOG_ROOT}/kube}"
 
-# Canonical doc + repos (just for echoing, no magic here)
 DLOG_DOC_URL_DEFAULT="https://docs.google.com/document/d/e/2PACX-1vShJ-OHsxJjf13YISSM7532zs0mHbrsvkSK73nHnK18rZmpysHC6B1RIMvGTALy0RIo1R1HRAyewCwR/pub"
 DLOG_REPO_DEFAULT="https://github.com/johnsonluke100/dlog"
 OMEGA_CONTAINER_REPO_DEFAULT="https://github.com/johnsonluke100/minecraft/tree/main/omega_numpy_container"
@@ -114,32 +112,29 @@ ensure_dlog_command() {
 }
 
 call_dlog() {
-  # thin wrapper – never call start.command here
+  # Thin wrapper – never call start.command here.
   ensure_dlog_command || return 1
   log_info "delegating to dlog.command → $*"
   "${DLOG_COMMAND}" "$@"
 }
 
 # --- UNIVERSE FILE MAPPING --------------------------------------------------
-# We keep per-universe snapshots as flat semicolon streams.
-# No dots in filenames, just like your ∞ filesystem style.
+# Format (for now):
+#   ;phone;label;epoch;tag;status;
+# You can later expand this to hold Ω segments (O1..O8).
 
 universe_file_path() {
   local phone="$1"
   local label="$2"
   ensure_dir "${UNIVERSE_ROOT}/${phone}"
-  # We deliberately avoid dots; use ; and plain text.
   printf '%s\n' "${UNIVERSE_ROOT}/${phone}/${label};universe"
 }
 
-# Very simple stub universe line, just so the bricks exist.
-# You can mutate the format later to match full Ω segments (O1..O8).
 default_universe_payload() {
   local phone="$1"
   local label="$2"
   local now_epoch
   now_epoch="$(date +%s)"
-  # ;phone;label;epoch;vortex_or_comet;status;
   printf ';%s;%s;%s;seed;ok;\n' "${phone}" "${label}" "${now_epoch}"
 }
 
@@ -168,6 +163,35 @@ read_universe_or_die() {
   cat "${file}"
 }
 
+# --- UNIVERSE SCAN (NEW) ----------------------------------------------------
+
+cmd_scan() {
+  banner "refold.command scan (all universes)"
+
+  ensure_dir "${UNIVERSE_ROOT}"
+
+  local files
+  files="$(find "${UNIVERSE_ROOT}" -type f -name '*;universe' 2>/dev/null || true)"
+
+  if [ -z "${files}" ]; then
+    log_warn "No universe files found yet. Use 'universe' or 'pair' to seed."
+    return 0
+  fi
+
+  printf '%-12s %-12s %-12s %-10s %-10s %s\n' \
+    "Phone" "Label" "Epoch" "Tag" "State" "File"
+  printf '%-12s %-12s %-12s %-10s %-10s %s\n' \
+    "------------" "------------" "------------" "----------" "----------" "----------------"
+
+  local f line phone_field label_field epoch_field tag_field status_field _rest
+  for f in ${files}; do
+    line="$(cat "${f}")"
+    IFS=';' read -r _ phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
+    printf '%-12s %-12s %-12s %-10s %-10s %s\n' \
+      "${phone_field}" "${label_field}" "${epoch_field}" "${tag_field}" "${status_field}" "${f}"
+  done
+}
+
 # --- KUBERNETES HELPERS -----------------------------------------------------
 
 detect_kube_provider() {
@@ -183,7 +207,6 @@ detect_kube_provider() {
   fi
 
   if optional_cmd kubectl; then
-    # No local cluster helpers, but kubectl exists → external cluster
     printf 'external\n'
     return 0
   fi
@@ -198,8 +221,27 @@ ensure_kubectl() {
   fi
 }
 
-kube_create_namespace_if_missing() {
+# Check if kubectl can reach *any* cluster without spamming raw errors.
+kube_check_cluster() {
   ensure_kubectl
+  if ! kubectl cluster-info >/dev/null 2>&1; then
+    local ctx
+    ctx="$(kubectl config current-context 2>/dev/null || echo 'none')"
+    log_warn "kubectl is installed, but no reachable cluster."
+    log_warn "Current context: ${ctx}"
+    log_warn "Start a cluster (kind/minikube/real) or point kubeconfig at a live cluster."
+    return 1
+  fi
+  return 0
+}
+
+kube_create_namespace_if_missing() {
+  # Soft behavior: if there is no cluster, don't crash; just log and return.
+  if ! kube_check_cluster; then
+    log_warn "Skipping namespace creation because no cluster is reachable yet."
+    return 0
+  fi
+
   if kubectl get namespace "${KUBE_NAMESPACE}" >/dev/null 2>&1; then
     log_info "Kubernetes namespace already exists: ${KUBE_NAMESPACE}"
   else
@@ -228,7 +270,11 @@ kube_init_minikube() {
 
 kube_init_external() {
   banner "Kubernetes: external cluster"
-  log_info "Assuming kubeconfig already points at the desired cluster."
+  if ! kube_check_cluster; then
+    log_warn "No reachable external cluster yet; kube init is a no-op for now."
+    return 0
+  fi
+  log_info "External cluster is reachable; you can use kube apply/status/logs."
 }
 
 kube_init() {
@@ -256,15 +302,34 @@ kube_init() {
   log_info "You can drop .yaml files in there and run: ${SCRIPT_NAME} kube apply"
 }
 
-kube_apply_manifests() {
-  ensure_kubectl
-  if [ ! -d "${KUBE_MANIFEST_ROOT}" ]; then
-    die "Kubernetes manifest directory missing: ${KUBE_MANIFEST_ROOT}"
-  fi
-
+kube_write_starter_manifest_if_missing() {
+  ensure_dir "${KUBE_MANIFEST_ROOT}"
   if ! ls "${KUBE_MANIFEST_ROOT}"/*.yaml >/dev/null 2>&1; then
-    log_warn "No .yaml files found under ${KUBE_MANIFEST_ROOT}"
-    log_warn "Create manifests first, then re-run: ${SCRIPT_NAME} kube apply"
+    local manifest="${KUBE_MANIFEST_ROOT}/hello-universe.yaml"
+    log_info "No .yaml manifests found; writing starter file: ${manifest}"
+    cat <<'YAML' > "${manifest}"
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dlog-universe
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dlog-hello
+  namespace: dlog-universe
+data:
+  message: "Welcome to the DLOG Universe (hello-universe.yaml)."
+YAML
+  fi
+}
+
+kube_apply_manifests() {
+  kube_write_starter_manifest_if_missing
+
+  if ! kube_check_cluster; then
+    log_warn "Cluster not reachable; skipping kubectl apply for now."
+    log_warn "Once your cluster is up, re-run: ${SCRIPT_NAME} kube apply"
     return 0
   fi
 
@@ -273,7 +338,11 @@ kube_apply_manifests() {
 }
 
 kube_status() {
-  ensure_kubectl
+  if ! kube_check_cluster; then
+    log_warn "Cluster not reachable; cannot show Kubernetes status yet."
+    return 0
+  fi
+
   banner "Kubernetes: status (namespace=${KUBE_NAMESPACE})"
   kubectl get pods -n "${KUBE_NAMESPACE}" || true
   echo
@@ -283,17 +352,25 @@ kube_status() {
 }
 
 kube_logs() {
-  ensure_kubectl
+  if ! kube_check_cluster; then
+    log_warn "Cluster not reachable; cannot fetch logs yet."
+    return 0
+  fi
+
   local pod_selector="${1:-}"
   if [ -z "${pod_selector}" ]; then
-    die "kube logs requires a pod name or label selector, e.g. 'api' or 'app=dlog-api'"
+    die "kube logs requires a pod name or label selector, e.g. 'app=dlog-api'"
   fi
   banner "Kubernetes: logs for selector=${pod_selector}"
   kubectl logs -n "${KUBE_NAMESPACE}" -l "${pod_selector}" --tail=200 || true
 }
 
 kube_port_forward() {
-  ensure_kubectl
+  if ! kube_check_cluster; then
+    log_warn "Cluster not reachable; cannot port-forward yet."
+    return 0
+  fi
+
   local svc="${1:-}"
   local local_port="${2:-8080}"
   local remote_port="${3:-80}"
@@ -304,6 +381,92 @@ kube_port_forward() {
 
   banner "Kubernetes: port-forward → localhost:${local_port} → svc/${svc}:${remote_port}"
   kubectl port-forward -n "${KUBE_NAMESPACE}" "svc/${svc}" "${local_port}:${remote_port}"
+}
+
+# --- UNIVERSE → CONFIGMAP YAML (NEW) ----------------------------------------
+
+write_universe_configmap_yaml() {
+  local phone="$1"
+  local label="$2"
+
+  local file
+  file="$(universe_file_path "${phone}" "${label}")"
+  if [ ! -f "${file}" ]; then
+    log_warn "universe file missing for phone=${phone} label=${label}, skipping YAML sync."
+    return 0
+  fi
+
+  local line
+  line="$(cat "${file}")"
+
+  local _dummy phone_field label_field epoch_field tag_field status_field _rest
+  IFS=';' read -r _dummy phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
+
+  ensure_dir "${KUBE_MANIFEST_ROOT}/universe"
+  local yaml="${KUBE_MANIFEST_ROOT}/universe/${phone_field}-${label_field}.yaml"
+
+  # Escape double quotes in raw line.
+  local raw_escaped="${line//\"/\\\"}"
+
+  cat > "${yaml}" <<EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dlog-${phone_field}-${label_field}
+  namespace: ${KUBE_NAMESPACE}
+data:
+  phone: "${phone_field}"
+  label: "${label_field}"
+  epoch: "${epoch_field}"
+  tag: "${tag_field}"
+  status: "${status_field}"
+  raw: "${raw_escaped}"
+EOF
+
+  log_info "wrote universe configmap manifest → ${yaml}"
+}
+
+sync_universe_manifests() {
+  ensure_dir "${UNIVERSE_ROOT}"
+  ensure_dir "${KUBE_MANIFEST_ROOT}/universe"
+
+  local files
+  files="$(find "${UNIVERSE_ROOT}" -type f -name '*;universe' 2>/dev/null || true)"
+
+  if [ -z "${files}" ]; then
+    log_warn "No universe files found under ${UNIVERSE_ROOT} to sync."
+    return 0
+  fi
+
+  local f filename label phone
+  for f in ${files}; do
+    filename="$(basename "${f}")"   # e.g. vortex;universe
+    label="${filename%%;*}"         # e.g. vortex
+    phone="$(basename "$(dirname "${f}")")"  # e.g. 9132077554
+    write_universe_configmap_yaml "${phone}" "${label}"
+  done
+}
+
+kube_sync_universe() {
+  banner "Kubernetes: syncing universes → ConfigMap manifests"
+
+  sync_universe_manifests
+
+  local universe_dir="${KUBE_MANIFEST_ROOT}/universe"
+
+  if ! ls "${universe_dir}"/*.yaml >/dev/null 2>&1; then
+    log_warn "No universe YAML manifests found under ${universe_dir}."
+    return 0
+  fi
+
+  if ! kube_check_cluster; then
+    log_warn "Cluster not reachable; only wrote YAML manifests."
+    log_warn "Once your cluster is up, run: ${SCRIPT_NAME} kube sync again."
+    return 0
+  fi
+
+  log_info "Applying all universe ConfigMaps from: ${universe_dir}"
+  kubectl apply -n "${KUBE_NAMESPACE}" -f "${universe_dir}"
 }
 
 cmd_kube() {
@@ -326,6 +489,9 @@ cmd_kube() {
     port-forward|pf)
       kube_port_forward "$@"
       ;;
+    sync)
+      kube_sync_universe
+      ;;
     provider)
       banner "Kubernetes: provider detection"
       detect_kube_provider
@@ -338,7 +504,13 @@ Usage:
       → Detect provider (kind/minikube/external) and ensure namespace.
 
   ${SCRIPT_NAME} kube apply
-      → Apply all .yaml manifests under: ${KUBE_MANIFEST_ROOT}
+      → Ensure a starter manifest exists, then apply all .yaml files under:
+          ${KUBE_MANIFEST_ROOT}
+
+  ${SCRIPT_NAME} kube sync
+      → Convert every universe file into a ConfigMap YAML under:
+          ${KUBE_MANIFEST_ROOT}/universe
+        and, if a cluster is reachable, kubectl apply them.
 
   ${SCRIPT_NAME} kube status
       → Show pods/services/deployments in namespace: ${KUBE_NAMESPACE}
@@ -413,13 +585,10 @@ Local Dev Expectations:
       * https://dlog.local/9132077554/comet/status/
       * etc.
 
-If you wire Kubernetes ingress + TLS, you can make the browser
-see the same universe that refold.command is echoing here.
-
 EOF
 }
 
-# --- UNIVERSE / STATUS COMMANDS --------------------------------------------
+# --- UNIVERSE / STATUS / PAIR ----------------------------------------------
 
 cmd_universe() {
   local phone="${1:-}"
@@ -452,11 +621,13 @@ cmd_status() {
 
   banner "Universe status for phone=${phone} label=${label}"
 
-  local line
-  line="$(read_universe_or_die "${phone}" "${label}")"
+  # Auto-birth universe if missing instead of hard error.
+  local file
+  file="$(write_universe_if_missing "${phone}" "${label}")"
 
-  # Very basic parsing: ;phone;label;epoch;tag;status;
-  # We don't enforce structure strictly; we just split on ;.
+  local line
+  line="$(cat "${file}")"
+
   IFS=';' read -r _ phone_field label_field epoch_field tag_field status_field _rest <<< "${line}"
 
   printf 'Phone : %s\n' "${phone_field}"
@@ -468,21 +639,43 @@ cmd_status() {
   printf 'Raw   : %s\n' "${line}"
 }
 
-# --- BEAT / ORBIT (SAFE STUBS, NO PARSE ERRORS) ----------------------------
+cmd_pair() {
+  local phone="${1:-}"
+  if [ -z "${phone}" ]; then
+    die "usage: ${SCRIPT_NAME} pair <phone>"
+  fi
+
+  banner "Universe pair (vortex + comet) for phone=${phone}"
+
+  local fv fc
+  fv="$(write_universe_if_missing "${phone}" "vortex")"
+  fc="$(write_universe_if_missing "${phone}" "comet")"
+
+  log_info "vortex universe file: ${fv}"
+  log_info "comet  universe file: ${fc}"
+
+  echo "------------------------------------------------------"
+  echo "vortex:"
+  cat "${fv}"
+  echo "------------------------------------------------------"
+  echo "comet:"
+  cat "${fc}"
+  echo "------------------------------------------------------"
+}
+
+# --- BEAT / ORBIT (SAFE STUBS) ---------------------------------------------
 
 cmd_beat() {
   banner "refold.command beat"
   cat <<EOF
-Beat is now a SAFE stub.
-
-Previously, this may have been wired into some experimental parser that
-threw errors. For now, beat just acknowledges the request so your logs
-stay clean.
+Beat is still a SAFE stub.
 
 You can later repurpose "beat" as:
   - a single-block refold tick,
-  - a heartbeat that syncs DLOG state into Kubernetes ConfigMaps,
+  - a heartbeat that syncs DLOG state into Kubernetes (ConfigMaps/CRDs),
   - or a phi-flavored mining/metronome pulse.
+
+For now, it only speaks calmly so your logs remain clean.
 
 EOF
 }
@@ -535,9 +728,12 @@ Usage:
   ${SCRIPT_NAME} api
       → Print canonical URLs + dev expectations.
 
+  ${SCRIPT_NAME} scan
+      → List all universe files in a table (phone/label/epoch/tag/state).
+
   ${SCRIPT_NAME} kube <subcommand> [args...]
       → Kubernetes helper:
-           init, apply, status, logs, port-forward, provider
+           init, apply, status, logs, port-forward, provider, sync
 
   ${SCRIPT_NAME} universe <phone> <label>
       → Ensure a universe snapshot exists and print its contents.
@@ -547,6 +743,10 @@ Usage:
 
   ${SCRIPT_NAME} status <phone> <label>
       → Pretty-print the parsed fields for a given universe snapshot.
+        Auto-births the universe if it does not exist yet.
+
+  ${SCRIPT_NAME} pair <phone>
+      → Seed both vortex + comet universes for the given phone in one shot.
 
   ${SCRIPT_NAME} beat
       → Safe stub (no parse errors). Future heartbeat hook.
@@ -576,6 +776,9 @@ main() {
     api)
       cmd_api "$@"
       ;;
+    scan)
+      cmd_scan "$@"
+      ;;
     kube|kubernetes)
       cmd_kube "$@"
       ;;
@@ -584,6 +787,9 @@ main() {
       ;;
     status)
       cmd_status "$@"
+      ;;
+    pair)
+      cmd_pair "$@"
       ;;
     beat)
       cmd_beat "$@"
