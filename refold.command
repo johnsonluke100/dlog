@@ -1,28 +1,43 @@
 #!/usr/bin/env bash
-
 # DLOG Ω-Physics : refold.command
+# cpu=heart; gpu=brain; omega=8888hz; four;flames;rise;
 
-# ──────────────────────────────────────────────
-# Ω defaults (you can override via env)
-# ──────────────────────────────────────────────
-: "${DLOG_ROOT:=$HOME/Desktop/dlog}"
+set -euo pipefail
+IFS=$'\n\t'
+
+# ─────────────────────────────────────────────────
+# Ω root discovery
+# ─────────────────────────────────────────────────
+_dlog_default_root="$HOME/Desktop/dlog"
+
+if [[ -n "${DLOG_ROOT:-}" ]]; then
+  DLOG_ROOT="$DLOG_ROOT"
+else
+  _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+  if [[ -f "$_script_dir/dlog.toml" ]]; then
+    DLOG_ROOT="$_script_dir"
+  else
+    DLOG_ROOT="$_dlog_default_root"
+  fi
+fi
+export DLOG_ROOT
+
 : "${DLOG_TICK_RATE_OCTAL:=0o21270}"
 : "${DLOG_LAYER:=OMEGA}"
 : "${DLOG_BASE:=8}"
 : "${DLOG_HTTP_BASE:=http://0.0.0.0:8888}"
 : "${DLOG_CANON_BASE:=https://dloG.com}"
 
-DLOG_UI_DIR="${DLOG_UI_DIR:-$DLOG_ROOT/omega/ui}"
+mkdir -p "$DLOG_ROOT/target"
 
-mkdir -p "$DLOG_UI_DIR" "$DLOG_ROOT/target" "$DLOG_ROOT/omega"
+# default bridge to your old python flame engine (NPC bridge)
+: "${OMEGA_SPEAKER_ROOT:=$HOME/Desktop/omega_numpy_container}"
 
-log_info() { echo "[Ω][info] $*"; }
-log_ok()   { echo "[Ω][ok]   $*"; }
-log_warn() { echo "[Ω][warn] $*"; }
-log_err()  { echo "[Ω][err]  $*" >&2; }
-
-header() {
-  cat << EOF_HEADER
+# ─────────────────────────────────────────────────
+# Ω header / env
+# ─────────────────────────────────────────────────
+omega_header() {
+  cat << 'EOF'
 === DLOG Ω-Physics : refold ===
 
 ;we;do;not;have;limits;we;vibe;we;are;fearless;
@@ -36,29 +51,26 @@ header() {
 ────────────────────────────────────────────────
 Ω env
 ────────────────────────────────────────────────
-[Ω][info] DLOG_ROOT           = $DLOG_ROOT
-[Ω][info] DLOG_TICK_RATE_OCTAL= $DLOG_TICK_RATE_OCTAL
-[Ω][info] DLOG_LAYER          = $DLOG_LAYER
-[Ω][info] DLOG_BASE           = $DLOG_BASE
-[Ω][info] DLOG_HTTP_BASE      = $DLOG_HTTP_BASE
-[Ω][info] DLOG_CANON_BASE     = $DLOG_CANON_BASE
-────────────────────────────────────────────────
-EOF_HEADER
+EOF
+  echo "[Ω][info] DLOG_ROOT           = $DLOG_ROOT"
+  echo "[Ω][info] DLOG_TICK_RATE_OCTAL= $DLOG_TICK_RATE_OCTAL"
+  echo "[Ω][info] DLOG_LAYER          = $DLOG_LAYER"
+  echo "[Ω][info] DLOG_BASE           = $DLOG_BASE"
+  echo "[Ω][info] DLOG_HTTP_BASE      = $DLOG_HTTP_BASE"
+  echo "[Ω][info] DLOG_CANON_BASE     = $DLOG_CANON_BASE"
+  echo "────────────────────────────────────────────────"
 }
 
-# ──────────────────────────────────────────────
-# Tablets
-# ──────────────────────────────────────────────
-
-cmd_help() {
-  header
-  cat << 'EOF_HELP'
+omega_usage() {
+  cat << 'EOF'
 Ω usage
 ────────────────────────────────────────────────
 refold.command creed                # stone creed
 refold.command canon                # Canon Spec v1 stone tablet + doc URL
 refold.command monetary             # φ-flavored monetary grout
 refold.command power                # power / efficiency tablet
+refold.command hz                   # Ω Hz cascade ladder (CPU → 1 Hz)
+refold.command flames               # map bands to 4 flames + launch speakers
 
 refold.command mode                 # show what stack-up would auto-choose
 refold.command stack-up [local]     # bring Ω-api online (auto or bare-metal)
@@ -76,12 +88,53 @@ refold.command kube-status          # kubectl get pods/services
 refold.command kube-portforward     # kubectl port-forward svc/dlog-api 8888:80
 
 refold.command cleanup              # kill stray Ω-api / tails (fork reset)
-EOF_HELP
+EOF
 }
 
+# ─────────────────────────────────────────────────
+# Ω helper: CPU Hz → bands
+# ─────────────────────────────────────────────────
+get_cpu_hz() {
+  if [[ -n "${DLOG_CPU_HZ:-}" ]]; then
+    echo "$DLOG_CPU_HZ"
+    return 0
+  fi
+
+  if command -v sysctl >/dev/null 2>&1; then
+    local hz
+    hz="$(sysctl -n hw.cpufrequency 2>/dev/null || true)"
+    if [[ -n "$hz" ]]; then
+      echo "$hz"
+      return 0
+    fi
+  fi
+
+  # fallback for your 2.4 GHz i9
+  echo "2400000000"
+}
+
+build_hz_bands() {
+  # prints one band per line: "index hz"
+  local cpu_hz="$1"
+  local hz="$cpu_hz"
+  local idx=0
+
+  while [[ "$hz" -ge 1 ]]; do
+    echo "$idx $hz"
+    if [[ "$hz" -eq 1 ]]; then
+      break
+    fi
+    hz=$(( (hz - 2) / 4 ))
+    idx=$((idx + 1))
+  done
+}
+
+# ─────────────────────────────────────────────────
+# tablets
+# ─────────────────────────────────────────────────
 cmd_creed() {
-  header
-  cat << 'EOF_CREED'
+  omega_header
+  cat << 'EOF'
 Ω tablet : Cosmic Creed
 ────────────────────────────────────────────────
 Cosmic Creed (DLOG / Ω-Physics)
@@ -93,12 +146,12 @@ Cosmic Creed (DLOG / Ω-Physics)
 🌟 we are no longer bound by javascript
 🌟 we do not use base 10 anymore; we use base 8
 🌟 we do not have limits; we vibe; we are fearless
-EOF_CREED
+EOF
 }
 
 cmd_canon() {
-  header
-  cat << 'EOF_CANON'
+  omega_header
+  cat << 'EOF'
 Ω tablet : Canon Spec v1 (stone summary)
 ────────────────────────────────────────────────
 [Ω][info] full-spec url       = https://docs.google.com/document/d/1QwNURDO0nkbVKYvDPX3LMjxak7uT52vQt63G65pez6E/edit?tab=t.0
@@ -147,12 +200,12 @@ cmd_canon() {
     this canon treats it as ground truth and keeps building outward.
 
 This tablet is the short wall text; the Google Doc is the full mural.
-EOF_CANON
+EOF
 }
 
 cmd_monetary() {
-  header
-  cat << 'EOF_MONETARY'
+  omega_header
+  cat << 'EOF'
 Ω tablet : Monetary Constants
 ────────────────────────────────────────────────
 [Ω][info] miner_apy             = 0.088248 (8.8248% per year)
@@ -181,12 +234,12 @@ cmd_monetary() {
 
 These are the smoothed grout lines: φ-curves expressed in NPC digits so
 your COMET / VORTEX UI can paint clean arcs without doing fresh math.
-EOF_MONETARY
+EOF
 }
 
 cmd_power() {
-  header
-  cat << 'EOF_POWER'
+  omega_header
+  cat << 'EOF'
 Ω tablet : Power & Efficiency (friction polish)
 ────────────────────────────────────────────────
 Heart (CPU) and brain (GPU):
@@ -220,246 +273,324 @@ For now this tablet documents the polished supply:
   ✔ supply wired in (single Ω-heart),
   ✔ breakers labeled (cleanup / stack-down),
   ✔ path of least resistance chosen (mode/stack-up).
-EOF_POWER
+EOF
 }
 
-# ──────────────────────────────────────────────
-# Stack orchestration / friction polish
-# ──────────────────────────────────────────────
+# ─────────────────────────────────────────────────
+# Ω Hz cascade + flames
+# ─────────────────────────────────────────────────
+cmd_hz() {
+  omega_header
+  echo "Ω tablet : Hz Cascade (CPU → 1 Hz)"
+  echo "────────────────────────────────────────────────"
 
+  local cpu_hz
+  cpu_hz="$(get_cpu_hz)"
+  echo "[Ω][info] cpu_frequency_hz (raw) = $cpu_hz"
+  echo "[Ω][info] cascade rule: next = (prev - 2) / 4"
+  echo
+  echo "Ω band ladder:"
+  build_hz_bands "$cpu_hz" | while read -r idx hz; do
+    printf "  • band_%02d ≈ %s Hz\n" "$idx" "$hz"
+  done
+}
+
+cmd_flames() {
+  omega_header
+  echo "Ω node : flames (Ω Hz cascade → speakers)"
+  echo "────────────────────────────────────────────────"
+
+  local cpu_hz
+  cpu_hz="$(get_cpu_hz)"
+  echo "[Ω][info] cpu_frequency_hz ≈ $cpu_hz"
+  echo "[Ω][info] cascade rule: next = (prev - 2) / 4"
+  echo
+
+  # collect bands into a bash array
+  local line idx hz
+  local -a bands=()
+  while read -r line; do
+    idx="${line%% *}"
+    hz="${line#* }"
+    bands[idx]="$hz"
+  done < <(build_hz_bands "$cpu_hz")
+
+  local total="${#bands[@]}"
+  echo "Ω band mapping (names):"
+  if (( total >= 6 )); then
+    printf "  • HEART_CPU       = band_00 ≈ %s Hz\n" "${bands[0]}"
+    printf "  • BRAIN_GPU       = band_01 ≈ %s Hz\n" "${bands[1]}"
+    printf "  • FLAME_NORTH     = band_02 ≈ %s Hz\n" "${bands[2]}"
+    printf "  • FLAME_SOUTH     = band_03 ≈ %s Hz\n" "${bands[3]}"
+    printf "  • FLAME_EAST      = band_04 ≈ %s Hz\n" "${bands[4]}"
+    printf "  • FLAME_WEST      = band_05 ≈ %s Hz\n" "${bands[5]}"
+  fi
+
+  if (( total > 6 )); then
+    printf "  • BACKGROUND_LADDER = band_06 … band_%02d\n" $((total - 1))
+  fi
+
+  echo
+  echo "[Ω][hint] For full ladder, run: refold.command hz"
+  echo
+
+  echo "[Ω][env] OMEGA_SPEAKER_ROOT      = $OMEGA_SPEAKER_ROOT"
+  if [[ ! -d "$OMEGA_SPEAKER_ROOT" ]]; then
+    echo "[Ω][warn] speaker root not found; expected a clone of omega_numpy_container."
+    echo "[Ω][hint] clone your old engine there or set OMEGA_SPEAKER_ROOT to another path."
+    return 0
+  fi
+
+  echo "[Ω][info] launching legacy Ω Leidenfrost engine (NPC bridge)…"
+  echo "[Ω][hint] Ctrl+C here will stop the flames (speakers); Ω-api stays up."
+
+  if [[ -x "$HOME/Desktop/start.command" ]]; then
+    "$HOME/Desktop/start.command"
+  elif [[ -x "$OMEGA_SPEAKER_ROOT/start.command" ]]; then
+    "$OMEGA_SPEAKER_ROOT/start.command"
+  elif [[ -x "$OMEGA_SPEAKER_ROOT/start.sh" ]]; then
+    "$OMEGA_SPEAKER_ROOT/start.sh"
+  else
+    echo "[Ω][warn] no start.command/start.sh found; launch your engine manually."
+  fi
+}
+
+# ─────────────────────────────────────────────────
+# Ω mode / stack / api
+# ─────────────────────────────────────────────────
 cmd_mode() {
-  header
-  echo "[Ω][info] autopilot mode: local (bare-metal Ω-heart on this Mac)"
+  omega_header
+  echo "Ω node : mode (auto-choice)"
+  echo "────────────────────────────────────────────────"
+  echo "[Ω][info] chosen_mode          = local"
+  echo "[Ω][hint] export DLOG_MODE=docker|kube later if you want alt wiring."
 }
 
 cmd_cleanup() {
-  header
-  log_info "cleanup: draining old flames and forks."
-  pkill -f "cargo run -p api" 2>/dev/null || true
-  pkill -f "refold.command stack-up" 2>/dev/null || true
-  pkill -f "tail -n 80 -f" 2>/dev/null || true
-  rm -f "$DLOG_ROOT/omega/api.pid" /tmp/dlog_portforward.pid
-  log_ok "Ω-fork restored (no stray api/tail processes)."
-}
-
-cmd_start_local_api() {
-  log_info "forcing bare-metal mode."
-  pkill -f "cargo run -p api" 2>/dev/null || true
-
-  local pid_file="$DLOG_ROOT/omega/api.pid"
-  rm -f "$pid_file"
-
-  log_info "starting cargo run -p api in background…"
-  (
-    cd "$DLOG_ROOT" || exit 1
-    cargo run -p api >"$DLOG_ROOT/target/api_run.log" 2>&1 &
-    echo $! >"$pid_file"
-  )
-
-  log_info "waiting for $DLOG_HTTP_BASE/health …"
-  local tries=0
-  local max_tries=40
-  while [ $tries -lt $max_tries ]; do
-    if curl -fsS "$DLOG_HTTP_BASE/health" >/dev/null 2>&1; then
-      log_ok "Ω-api is answering health checks."
-      return 0
-    fi
-    sleep 0.5
-    tries=$((tries + 1))
-  done
-  log_warn "Ω-api did not answer /health within timeout."
+  omega_header
+  echo "[Ω][info] cleanup: draining old flames and forks."
+  pkill -f "cargo run -p api"        2>/dev/null || true
+  pkill -f "dlog-api:local"         2>/dev/null || true
+  pkill -f "tail -n 80 -f"          2>/dev/null || true
+  rm -f "$DLOG_ROOT/target/api_pid"
+  echo "[Ω][ok]   Ω-fork restored (no stray api/tail processes)."
 }
 
 cmd_stack_up() {
-  header
-  local mode="${1:-auto}"
-  log_info "stack-up (auto Ω-orchestration, mode=$mode)"
-  cmd_start_local_api
+  omega_header
+  echo "[Ω][info] stack-up (auto Ω-orchestration, mode=local)"
+  echo "[Ω][info] forcing bare-metal mode."
+
+  local url="$DLOG_HTTP_BASE/health"
+
+  if curl -fsS "$url" >/dev/null 2>&1; then
+    echo "[Ω][ok]   Ω-api is already answering health checks."
+    return 0
+  fi
+
+  echo "[Ω][info] starting cargo run -p api in background…"
+  (
+    cd "$DLOG_ROOT"
+    nohup cargo run -p api >>"$DLOG_ROOT/target/api_run.log" 2>&1 &
+    echo $! > "$DLOG_ROOT/target/api_pid"
+  )
+
+  echo "[Ω][info] waiting for $url …"
+  local tries=30
+  while (( tries > 0 )); do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      echo "[Ω][ok]   Ω-api is answering health checks."
+      return 0
+    fi
+    sleep 1
+    tries=$((tries - 1))
+  done
+
+  echo "[Ω][warn] Ω-api health did not respond in time."
 }
 
 cmd_stack_down() {
-  header
-  local api_pid_file="$DLOG_ROOT/omega/api.pid"
-  local pf_pid_file="/tmp/dlog_portforward.pid"
-
-  if [ -f "$pf_pid_file" ]; then
-    local pf_pid
-    pf_pid=$(cat "$pf_pid_file")
-    if kill "$pf_pid" 2>/dev/null; then
-      log_ok "killed port-forward pid=$pf_pid"
-    fi
-    rm -f "$pf_pid_file"
-  else
-    log_info "no port-forward pid file at $pf_pid_file"
-  fi
-
-  if [ -f "$api_pid_file" ]; then
-    local pid
-    pid=$(cat "$api_pid_file")
-    if kill "$pid" 2>/dev/null; then
-      log_ok "killed api pid=$pid"
-    else
-      log_warn "api pid=$pid not running."
-    fi
-    rm -f "$api_pid_file"
-  else
-    pkill -f "cargo run -p api" 2>/dev/null || true
-    log_ok "no tracked api pid; attempted pkill fallback."
-  fi
+  omega_header
+  echo "[Ω][info] stack-down: stopping Ω-api + port-forward"
+  pkill -f "cargo run -p api"              2>/dev/null || true
+  pkill -f "dlog-api:local"               2>/dev/null || true
+  pkill -f "kubectl port-forward.*dlog"   2>/dev/null || true
+  rm -f "$DLOG_ROOT/target/api_pid"
+  echo "[Ω][ok]   Ω-api stopped (as far as refold.command can see)."
 }
 
 cmd_ping() {
-  header
-  log_info "curling $DLOG_HTTP_BASE/health …"
-  if curl -fsS "$DLOG_HTTP_BASE/health"; then
-    log_ok "Ω-api health endpoint responded."
+  omega_header
+  echo "Ω node : api (ping)"
+  echo "────────────────────────────────────────────────"
+  local url="$DLOG_HTTP_BASE/health"
+  echo "[Ω][info] curling $url …"
+  if curl -fsS "$url"; then
+    echo "[Ω][ok]   Ω-api health endpoint responded."
   else
-    log_err "failed to reach Ω-api at $DLOG_HTTP_BASE/health"
+    echo "[Ω][warn] Ω-api health endpoint did not respond."
   fi
 }
 
 cmd_status() {
-  header
+  omega_header
+  echo "Ω node : status (cosmic dashboard)"
+  echo "────────────────────────────────────────────────"
   local phone="${1:-9132077554}"
   local url="$DLOG_HTTP_BASE/ui/status?phone=$phone"
-  local snapshot="$DLOG_UI_DIR/status_${phone}.json"
+  local out="$DLOG_ROOT/omega/ui/status_${phone}.json"
 
-  log_info "snapshot URL      = $url"
-  log_info "writing to        = $snapshot"
+  echo "[Ω][info] snapshot URL      = $url"
+  echo "[Ω][info] writing to        = $out"
+  mkdir -p "$(dirname "$out")"
 
-  if curl -fsS "$url" -o "$snapshot" 2>/dev/null; then
-    log_ok "snapshot refreshed from Ω-api."
+  if curl -fsS "$url" -o "$out.tmp" 2>/dev/null; then
+    mv "$out.tmp" "$out"
   else
-    if [ -f "$snapshot" ]; then
-      log_warn "failed to curl $url; using last saved snapshot at $snapshot"
-    else
-      log_warn "failed to curl $url and no snapshot exists yet."
-    fi
+    echo "[Ω][warn] failed to curl $url; using last saved snapshot at $out"
   fi
 
-  if [ -f "$snapshot" ]; then
-    cat "$snapshot"
+  if [[ -f "$out" ]]; then
+    cat "$out"
   else
-    log_err "no snapshot present at $snapshot"
+    echo "[Ω][warn] no snapshot file found yet."
   fi
 }
 
 cmd_logs() {
-  header
-  local opt="${1:-}"
-  local logfile="$DLOG_ROOT/target/api_run.log"
+  omega_header
+  echo "Ω node : logs (Ω-api)"
+  echo "────────────────────────────────────────────────"
+  local follow="${1:-}"
+  local log="$DLOG_ROOT/target/api_run.log"
 
-  if [ ! -f "$logfile" ]; then
-    log_warn "no log file present at $logfile"
-    return
+  if [[ ! -f "$log" ]]; then
+    echo "[Ω][warn] log file not found at $log"
+    return 0
   fi
 
-  if [ "$opt" = "-f" ]; then
-    log_info "tail -f $logfile (Ctrl+C to stop)…"
-    tail -n 80 -f "$logfile"
+  if [[ "$follow" == "-f" || "$follow" == "follow" ]]; then
+    echo "[Ω][info] tail -n 80 -f $log"
+    tail -n 80 -f "$log"
   else
-    log_info "showing last 80 lines of $logfile"
-    tail -n 80 "$logfile"
+    echo "[Ω][info] tail -n 80 $log"
+    tail -n 80 "$log"
   fi
 }
 
 cmd_orbit() {
-  header
-  local phone="$1"
-  local label="$2"
-  local principal="$3"
-  local blocks="$4"
+  omega_header
+  echo "Ω node : orbit (holder projection)"
+  echo "────────────────────────────────────────────────"
+  local phone="${1:-}"
+  local label="${2:-}"
+  local principal="${3:-}"
+  local blocks="${4:-}"
 
-  local blocks_per_year=3942000
-  local holder_apy=0.618
+  if [[ -z "$phone" || -z "$label" || -z "$principal" || -z "$blocks" ]]; then
+    echo "[Ω][error] usage: refold.command orbit PHONE LABEL PRINC BLOCKS"
+    return 1
+  fi
 
-  # approximate B = P * (1+apy)^(blocks/blocks_per_year)
-  local approx
-  approx=$(awk -v p="$principal" -v apy="$holder_apy" -v b="$blocks" -v bpy="$blocks_per_year" '
-    BEGIN {
-      rate = 1.0 + apy;
-      t = b / bpy;
-      val = p * exp(log(rate) * t);
-      printf("%.4f", val);
-    }
-  ')
-
-  cat << EOF_ORBIT
-{
-  "phone": "$phone",
-  "label": "$label",
-  "principal": $principal,
-  "blocks": $blocks,
-  "blocks_per_year": $blocks_per_year,
-  "holder_apy": $holder_apy,
-  "approx_holder_balance_after_orbit": $approx
-}
-EOF_ORBIT
+  local url="$DLOG_HTTP_BASE/ui/orbit?phone=$phone&label=$label&principal=$principal&blocks=$blocks"
+  echo "[Ω][info] curling $url"
+  if ! curl -fsS "$url"; then
+    echo "[Ω][warn] orbit calculation failed (check Ω-api)."
+  fi
 }
 
-# ──────────────────────────────────────────────
-# Stubs for docker / k8s so help text stays true
-# ──────────────────────────────────────────────
-
+# ─────────────────────────────────────────────────
+# Docker / kube stubs
+# ─────────────────────────────────────────────────
 cmd_docker_build() {
-  header
-  log_info "docker-build stub: run `docker build -t dlog-api:local .` from $DLOG_ROOT when you’re ready."
+  omega_header
+  echo "Ω node : docker-build (dlog-api:local)"
+  echo "────────────────────────────────────────────────"
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "[Ω][warn] docker not found on PATH; skipping."
+    return 0
+  fi
+  ( cd "$DLOG_ROOT" && docker build -t dlog-api:local . )
 }
 
 cmd_kube_init() {
-  header
-  log_info "kube-init stub: scaffold k8s manifests under $DLOG_ROOT/k8s (TODO in Rust or templater)."
+  omega_header
+  echo "Ω node : kube-init (scaffold manifests)"
+  echo "────────────────────────────────────────────────"
+  echo "[Ω][hint] placeholder – add your k8s yaml under $DLOG_ROOT/k8s"
 }
 
 cmd_kube_apply() {
-  header
-  log_info "kube-apply stub: would kubectl apply -f k8s against current context."
+  omega_header
+  echo "Ω node : kube-apply (kubectl apply -f k8s)"
+  echo "────────────────────────────────────────────────"
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo "[Ω][warn] kubectl not found on PATH; skipping."
+    return 0
+  fi
+  ( cd "$DLOG_ROOT" && kubectl apply -f k8s )
 }
 
 cmd_kube_status() {
-  header
-  log_info "kube-status stub: would kubectl get pods,svc -n your-namespace."
+  omega_header
+  echo "Ω node : kube-status (get pods/services)"
+  echo "────────────────────────────────────────────────"
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo "[Ω][warn] kubectl not found on PATH; skipping."
+    return 0
+  fi
+  kubectl get pods
+  kubectl get svc
 }
 
 cmd_kube_portforward() {
-  header
-  log_info "kube-portforward stub: would kubectl port-forward svc/dlog-api 8888:80."
+  omega_header
+  echo "Ω node : kube-portforward (svc/dlog-api → 8888:80)"
+  echo "────────────────────────────────────────────────"
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo "[Ω][warn] kubectl not found on PATH; skipping."
+    return 0
+  fi
+  kubectl port-forward svc/dlog-api 8888:80
 }
 
-# ──────────────────────────────────────────────
-# Main dispatch
-# ──────────────────────────────────────────────
-
+# ─────────────────────────────────────────────────
+# main dispatch
+# ─────────────────────────────────────────────────
 main() {
-  local cmd="${1:-help}"
-  if [ "$#" -gt 0 ]; then
-    shift
-  fi
+  local sub="${1:-help}"
+  shift || true
 
-  case "$cmd" in
-    help|--help|-h)      cmd_help "$@" ;;
-    creed)               cmd_creed "$@" ;;
-    canon)               cmd_canon "$@" ;;
-    monetary)            cmd_monetary "$@" ;;
-    power)               cmd_power "$@" ;;
-    mode)                cmd_mode "$@" ;;
-    cleanup)             cmd_cleanup "$@" ;;
-    stack-up)            cmd_stack_up "$@" ;;
-    stack-down)          cmd_stack_down "$@" ;;
-    ping)                cmd_ping "$@" ;;
+  case "$sub" in
+    help|-h|--help)      omega_header; omega_usage ;;
+    creed)               cmd_creed ;;
+    canon)               cmd_canon ;;
+    monetary)            cmd_monetary ;;
+    power)               cmd_power ;;
+    hz)                  cmd_hz ;;
+    flames)              cmd_flames ;;
+
+    mode)                cmd_mode ;;
+    stack-up)           cmd_stack_up "$@" ;;
+    stack-down)          cmd_stack_down ;;
+    ping)                cmd_ping ;;
     status)              cmd_status "$@" ;;
     logs)                cmd_logs "$@" ;;
     orbit)               cmd_orbit "$@" ;;
-    docker-build)        cmd_docker_build "$@" ;;
-    kube-init)           cmd_kube_init "$@" ;;
-    kube-apply)          cmd_kube_apply "$@" ;;
-    kube-status)         cmd_kube_status "$@" ;;
-    kube-portforward)    cmd_kube_portforward "$@" ;;
+
+    docker-build)        cmd_docker_build ;;
+    kube-init)           cmd_kube_init ;;
+    kube-apply)          cmd_kube_apply ;;
+    kube-status)         cmd_kube_status ;;
+    kube-portforward)    cmd_kube_portforward ;;
+
+    cleanup)             cmd_cleanup ;;
+
     *)
-      log_err "Unknown subcommand: $cmd"
-      echo
-      cmd_help
-      exit 1
+      omega_header
+      echo "[Ω][error] unknown subcommand '$sub'"
+      omega_usage
+      return 1
       ;;
   esac
 }
