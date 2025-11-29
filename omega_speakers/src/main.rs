@@ -1,167 +1,153 @@
 use std::env;
-use std::fs;
+use std::time::{Duration, Instant};
 
-use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
+use rand::Rng;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
 use rodio::{OutputStream, Sink, Source};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Figure out roots
-    let omega_root = env::var("OMEGA_ROOT").unwrap_or_else(|_| ".".to_string());
-    let control_path = format!("{}/flames/flames;control", omega_root);
-    let sky_stream_path = format!("{}/sky/sky;stream", omega_root);
-
-    // Master gain (you can override with OMEGA_GAIN env)
-    let gain: f32 = env::var("OMEGA_GAIN")
+fn env_f32(key: &str, default: f32) -> f32 {
+    env::var(key)
         .ok()
         .and_then(|s| s.parse::<f32>().ok())
-        .unwrap_or(0.12);
-
-    // Target frequency (prefer hz= from flames;control, else 8888.0)
-    let target_hz = read_hz_from_control(&control_path).unwrap_or(8888.0);
-
-    println!("=== Ω Rust Speaker Engine (Φ Harmonic Bloom v2) ===");
-    println!("[+] OMEGA_ROOT     : {}", omega_root);
-    println!("[+] Control File   : {}", control_path);
-    println!("[+] Sky Stream     : {}", sky_stream_path);
-    println!("[+] Target Hz      : {:.2}", target_hz);
-    println!("[+] MASTER_GAIN    : {:.6}", gain);
-    println!("[+] Output         : 4-voice ocean torch engaged 🌊🔥");
-
-    let (_stream, stream_handle) = OutputStream::try_default()?;
-    let sink = Sink::try_new(&stream_handle)?;
-
-    // One continuous flame field
-    let source = FlameField::new(target_hz, gain);
-    sink.append(source);
-
-    sink.sleep_until_end();
-    Ok(())
+        .unwrap_or(default)
 }
 
-fn read_hz_from_control(path: &str) -> Option<f32> {
-    let text = fs::read_to_string(path).ok()?;
-    for line in text.lines() {
-        if let Some(rest) = line.trim().strip_prefix("hz=") {
-            // expect "hz=7777 height=7 friction=leidenfrost"
-            let hz_part = rest.split_whitespace().next().unwrap_or("");
-            if let Ok(v) = hz_part.parse::<f32>() {
-                return Some(v);
-            }
-        }
-    }
-    None
-}
+const VOICES: usize = 4;
 
-/// Φ-rich vortex field:
-/// - carrier_hz (e.g. 7777 / 8888)
-/// - low band at ~262 Hz (body)
-/// - mid band at ~1111 Hz (edge)
-/// - noise “foam” shaped by slow LFO
-/// - slow stereo drift (pan LFO)
-struct FlameField {
+struct OmegaSource {
     sample_rate: u32,
-    carrier_hz: f32,
-    gain: f32,
+    rail_hz: f32,
+    omega_gain: f32,
 
-    // phased voices
-    phase_carrier: f32,
-    phase_low1: f32,
-    phase_low2: f32,
-    phase_lfo_amp: f32,
-    phase_lfo_pan: f32,
+    whoosh_min_hz: f32,
+    whoosh_max_hz: f32,
+    whoosh_freq: f32,
+    whoosh_target_freq: f32,
+    whoosh_phases: [f32; VOICES],
+    whoosh_detune: [f32; VOICES],
 
-    // noise + stereo framing
-    noise_rng: SmallRng,
-    next_is_left: bool,
-    last_left: f32,
-    last_right: f32,
+    rail_phase: f32,
+    t: f64,
+    whoosh_change_interval: f32,
+    whoosh_time_since_change: f32,
+
+    rng: StdRng,
+    start: Instant,
+    last_log: Instant,
 }
 
-impl FlameField {
-    fn new(carrier_hz: f32, gain: f32) -> Self {
+impl OmegaSource {
+    fn new(
+        sample_rate: u32,
+        rail_hz: f32,
+        omega_gain: f32,
+        whoosh_min_hz: f32,
+        whoosh_max_hz: f32,
+    ) -> Self {
+        // Deterministic 32-byte seed built from a 64-bit constant
+        let base = 0xD10D_8888_u64.to_le_bytes();
+        let mut seed = [0u8; 32];
+        for i in 0..4 {
+            seed[i * 8..(i + 1) * 8].copy_from_slice(&base);
+        }
+        let mut rng = StdRng::from_seed(seed);
+
+        let init_freq = rng.gen_range(whoosh_min_hz..whoosh_max_hz);
+        let mut detune = [1.0f32; VOICES];
+        for d in detune.iter_mut() {
+            *d = rng.gen_range(0.9..1.1);
+        }
+        let now = Instant::now();
+
         Self {
-            sample_rate: 44_100,
-            carrier_hz,
-            gain,
-            phase_carrier: 0.0,
-            phase_low1: 0.0,
-            phase_low2: 0.0,
-            phase_lfo_amp: 0.0,
-            phase_lfo_pan: 0.0,
-            noise_rng: SmallRng::from_entropy(),
-            next_is_left: true,
-            last_left: 0.0,
-            last_right: 0.0,
+            sample_rate,
+            rail_hz,
+            omega_gain,
+            whoosh_min_hz,
+            whoosh_max_hz,
+            whoosh_freq: init_freq,
+            whoosh_target_freq: init_freq,
+            whoosh_phases: [0.0; VOICES],
+            whoosh_detune: detune,
+            rail_phase: 0.0,
+            t: 0.0,
+            whoosh_change_interval: 4.0,
+            whoosh_time_since_change: 0.0,
+            rng,
+            start: now,
+            last_log: now,
         }
     }
-
-    fn step_frame(&mut self) {
-        let sr = self.sample_rate as f32;
-
-        // advance phases
-        self.phase_carrier = (self.phase_carrier + self.carrier_hz / sr) % 1.0;
-        self.phase_low1 = (self.phase_low1 + 262.3 / sr) % 1.0;
-        self.phase_low2 = (self.phase_low2 + 1111.0 / sr) % 1.0;
-        self.phase_lfo_amp = (self.phase_lfo_amp + 0.333 / sr) % 1.0;
-        self.phase_lfo_pan = (self.phase_lfo_pan + 0.072 / sr) % 1.0;
-
-        let theta = std::f32::consts::TAU;
-
-        let s_carrier = (self.phase_carrier * theta).sin(); // 8888 bed
-        let s_low1 = (self.phase_low1 * theta).sin();       // deep body
-        let s_low2 = (self.phase_low2 * theta).sin();       // “edge” band
-
-        // soft pink-ish noise: white * slow envelope
-        let white: f32 = self.noise_rng.gen_range(-1.0..=1.0);
-        let lfo_amp = (self.phase_lfo_amp * theta).sin();
-        let foam_env = 0.55 + 0.35 * lfo_amp; // ~0.2..0.9
-        let foam = white * foam_env;
-
-        // mix the three tone bands + foam
-        let high = s_carrier * 0.40;
-        let body = s_low1 * 0.55 + s_low2 * 0.30;
-        let mono = (high + body + foam * 0.45) * 0.7;
-
-        // slow stereo pan: gentle drift, not spinning
-        let pan_lfo = (self.phase_lfo_pan * theta).sin();
-        let pan = 0.5 + 0.35 * pan_lfo; // 0.15 .. 0.85
-
-        let left = mono * (1.0 - pan);
-        let right = mono * pan;
-
-        // apply gain + soft clip
-        let gl = (left * self.gain).tanh();
-        let gr = (right * self.gain).tanh();
-
-        self.last_left = gl.clamp(-1.0, 1.0);
-        self.last_right = gr.clamp(-1.0, 1.0);
-    }
 }
 
-impl Iterator for FlameField {
+impl Iterator for OmegaSource {
     type Item = f32;
 
     fn next(&mut self) -> Option<f32> {
-        if self.next_is_left {
-            // compute a new stereo frame
-            self.step_frame();
-            self.next_is_left = false;
-            Some(self.last_left)
-        } else {
-            self.next_is_left = true;
-            Some(self.last_right)
+        let dt = 1.0 / self.sample_rate as f32;
+        self.t += dt as f64;
+
+        // timing rail at rail_hz (8888 by default)
+        self.rail_phase += self.rail_hz * dt;
+        if self.rail_phase >= 1.0 {
+            self.rail_phase -= 1.0;
         }
+        let rail = (2.0 * std::f32::consts::PI * self.rail_phase).sin();
+
+        // whoosh band 333–999 Hz, gently wandering
+        self.whoosh_time_since_change += dt;
+        if self.whoosh_time_since_change >= self.whoosh_change_interval {
+            self.whoosh_time_since_change = 0.0;
+            self.whoosh_target_freq = self
+                .rng
+                .gen_range(self.whoosh_min_hz..self.whoosh_max_hz);
+        }
+
+        // glide slowly toward new target so it feels alive, not steppy
+        let glide = 0.002;
+        self.whoosh_freq += (self.whoosh_target_freq - self.whoosh_freq) * glide;
+
+        // 4 detuned voices around the whoosh frequency
+        let mut whoosh_sum = 0.0f32;
+        for i in 0..VOICES {
+            self.whoosh_phases[i] += self.whoosh_freq * self.whoosh_detune[i] * dt;
+            if self.whoosh_phases[i] >= 1.0 {
+                self.whoosh_phases[i] -= 1.0;
+            }
+            whoosh_sum += (2.0 * std::f32::consts::PI * self.whoosh_phases[i]).sin();
+        }
+        whoosh_sum /= VOICES as f32;
+
+        // noise to make it "blowtorch / ocean" instead of pure tone
+        let noise: f32 = self.rng.gen_range(-1.0..1.0);
+        let whoosh = whoosh_sum * 0.5 + noise * 0.5;
+
+        // mix rail + whoosh bed
+        let sample = self.omega_gain * (rail * 0.25 + whoosh * 0.75);
+
+        // periodic status log like the old python engine
+        let now = Instant::now();
+        if now.duration_since(self.last_log) >= Duration::from_secs(1) {
+            self.last_log = now;
+            let t_sec = now.duration_since(self.start).as_secs_f32();
+            println!(
+                "[Ω] t={:6.2}s rail={:7.2}Hz whoosh≈{:7.2}Hz gain={:.6}",
+                t_sec, self.rail_hz, self.whoosh_freq, self.omega_gain
+            );
+        }
+
+        Some(sample)
     }
 }
 
-impl Source for FlameField {
+impl Source for OmegaSource {
     fn current_frame_len(&self) -> Option<usize> {
         None
     }
 
     fn channels(&self) -> u16 {
-        2
+        1
     }
 
     fn sample_rate(&self) -> u32 {
@@ -171,4 +157,38 @@ impl Source for FlameField {
     fn total_duration(&self) -> Option<std::time::Duration> {
         None
     }
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let omega_root = env::var("OMEGA_ROOT").unwrap_or_else(|_| ".".to_string());
+    let control_file = format!("{}/flames/flames;control", omega_root);
+    let sky_stream = format!("{}/sky/sky;stream", omega_root);
+
+    let rail_hz = env_f32("OMEGA_RAIL_HZ", 8888.0);
+    let whoosh_min_hz = env_f32("OMEGA_WHOOSH_MIN_HZ", 333.0);
+    let whoosh_max_hz = env_f32("OMEGA_WHOOSH_MAX_HZ", 999.0);
+    let omega_gain = env_f32("OMEGA_GAIN", 0.04);
+
+    println!("=== Ω Rust Speaker Engine (Φ Harmonic Bloom) ===");
+    println!("[+] OMEGA_ROOT     : {}", omega_root);
+    println!("[+] Control File   : {}", control_file);
+    println!("[+] Sky Stream     : {}", sky_stream);
+    println!("[+] Rail Hz        : {:.2}", rail_hz);
+    println!(
+        "[+] Whoosh Band    : {:.2} .. {:.2} Hz",
+        whoosh_min_hz, whoosh_max_hz
+    );
+    println!("[+] Gain           : {:.6}", omega_gain);
+    println!("[+] Output         : 4-voice golden field engaged ✨🌀");
+
+    let (_stream, stream_handle) = OutputStream::try_default()?;
+    let sink = Sink::try_new(&stream_handle)?;
+
+    let sample_rate = 44_100u32;
+    let src = OmegaSource::new(sample_rate, rail_hz, omega_gain, whoosh_min_hz, whoosh_max_hz);
+
+    sink.append(src);
+    sink.sleep_until_end();
+
+    Ok(())
 }

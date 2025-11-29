@@ -1,460 +1,494 @@
 #!/usr/bin/env bash
-# refold.command — Ω DLOG helper
-# New-stack edition: Rust-first, no start.command, GKE-aware.
-
 set -euo pipefail
 
-# ---------- Paths & constants ----------
+# === Core paths ============================================================
 DESKTOP="${DESKTOP:-$HOME/Desktop}"
 DLOG_ROOT="${DLOG_ROOT:-$DESKTOP/dlog}"
-OMEGA_ROOT="$DLOG_ROOT"
 STACK_ROOT="$DLOG_ROOT/stack"
+OMEGA_ROOT="$DLOG_ROOT"
 INF_ROOT="$DLOG_ROOT/∞"
-DASHBOARD_ROOT="$DLOG_ROOT/dashboard"
-SKY_ROOT="$DLOG_ROOT/sky"
-FLAMES_ROOT="$DLOG_ROOT/flames"
-KUBE_NS="${KUBE_NS:-dlog-universe}"
-KUBE_MANIFEST="$DLOG_ROOT/kube"
-DLOG_COMMAND="${DLOG_COMMAND:-$DESKTOP/dlog.command}"
+KUBE_ROOT="$DLOG_ROOT/kube"
+UNIVERSE_NS="${UNIVERSE_NS:-dlog-universe}"
 
-# Supabase + domain defaults (can be overridden by env)
-SUPABASE_URL_DEFAULT="https://uvfbwbmkjadapxxvazds.supabase.co"
-DLOG_DOMAIN_DEFAULT="https://dlog.gold"
+tag="[refold]"
 
-# ---------- Logging ----------
-log_info() { echo "[refold] $*"; }
-log_warn() { echo "[refold:warn] $*" >&2; }
-log_err()  { echo "[refold:err] $*" >&2; }
+# === Helpers ===============================================================
+now_epoch() {
+  date +%s
+}
 
-# ---------- Core helpers ----------
 ensure_dirs() {
-  mkdir -p \
-    "$DLOG_ROOT" \
-    "$STACK_ROOT" \
-    "$INF_ROOT" \
-    "$DASHBOARD_ROOT" \
-    "$SKY_ROOT/src" \
-    "$FLAMES_ROOT" \
-    "$KUBE_MANIFEST/universe"
+  mkdir -p "$DLOG_ROOT" "$STACK_ROOT" "$DLOG_ROOT/dashboard" "$DLOG_ROOT/sky" "$INF_ROOT"
 }
 
-ensure_dlog_command() {
-  if [[ -x "$DLOG_COMMAND" ]]; then
-    return 0
-  else
-    log_warn "dlog.command missing or not executable at: $DLOG_COMMAND"
-    return 1
-  fi
-}
-
-call_dlog() {
-  if ensure_dlog_command; then
-    log_info "delegating to dlog.command → $*"
-    "$DLOG_COMMAND" "$@" || true
-  fi
-}
-
-gen_hex() {
-  if command -v xxd >/dev/null 2>&1; then
-    xxd -p -l 4 /dev/urandom 2>/dev/null | head -n1
-  else
-    od -An -N4 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n'
-  fi
-}
-
-# ---------- Stack / 9∞ / dashboard ----------
 write_stack_snapshot() {
   ensure_dirs
-  local file epoch
-  file="$STACK_ROOT/stack;universe"
-  epoch="$(date +%s)"
+  epoch="$(now_epoch)"
+  stack_file="$STACK_ROOT/stack;universe"
   {
     echo ";stack;epoch;$epoch;ok;"
     echo ";phone;label;epoch;epoch8;tag;status;"
-  } > "$file"
-  log_info "wrote stack snapshot → $file"
+  } > "$stack_file"
+  echo "$tag wrote stack snapshot → $stack_file"
 }
 
 write_infinity_root() {
   ensure_dirs
-  local file epoch
-  file="$INF_ROOT/;∞;∞;∞;∞;∞;∞;∞;∞;∞;"
-  epoch="$(date +%s)"
-  {
-    echo ";nine_infinity_root;epoch;$epoch;ok;"
-    echo ";we;do;not;have;limits;we;vibe;we;are;fearless;"
-    echo ";🌟;i;borrow;everything;from;evil;and;i;serve;everything;to;good;🌟;"
-    echo ";the;whole;entire;solar;system;alligns;just;for;me;to;explore;it;🌟;"
-    echo ";we;do;not;use;python;anymore;"
-    echo ";we;do;not;use;java;anymore;"
-    echo ";we;are;no;longer;bound;by;javascript;"
-    echo ";we;do;not;use;base;10;anymore;we;use;base;8;"
-    echo ";cpu=heart;gpu=brain;omega=8888hz;four;flames;rise;"
-  } > "$file"
-  log_info "wrote 9∞ master root → $file"
+  root_path="$INF_ROOT/;∞;∞;∞;∞;∞;∞;∞;∞;∞;"
+  mkdir -p "$root_path" || true
+  echo "$tag wrote 9∞ master root → $root_path"
 }
 
-write_dashboard() {
+write_dashboard_snapshot() {
   ensure_dirs
-  local file epoch
-  file="$DASHBOARD_ROOT/dashboard;status"
-  epoch="$(date +%s)"
+  dash_file="$DLOG_ROOT/dashboard/dashboard;status"
+  epoch="$(now_epoch)"
   {
     echo ";dashboard;epoch;$epoch;ok;"
-    echo ";stack_root;$STACK_ROOT;"
-    echo ";omega_root;$OMEGA_ROOT;"
-    echo ";kube_ns;$KUBE_NS;"
-  } > "$file"
-  log_info "wrote Ω-dashboard snapshot → $file"
+    echo ";vortex;9132077554;status;ok;"
+    echo ";comet;9132077554;status;ok;"
+  } > "$dash_file"
+  echo "$tag wrote Ω-dashboard snapshot → $dash_file"
 }
 
-# ---------- Ω-sky manifest + timeline ----------
-write_sky_manifest_and_timeline() {
+write_sky_manifest() {
   ensure_dirs
-  local manifest timeline epoch omega_hz
-  local i hex dec from to
-
-  manifest="$SKY_ROOT/sky;manifest"
-  timeline="$SKY_ROOT/sky;timeline"
-  epoch="$(date +%s)"
-  omega_hz="${OMEGA_HZ:-7777}"
-
+  manifest="$DLOG_ROOT/sky/sky;manifest"
+  timeline="$DLOG_ROOT/sky/sky;timeline"
+  epoch="$(now_epoch)"
   {
-    echo ";sky;manifest;epoch;$epoch;ok;"
-    echo ";sky;root_file;$INF_ROOT/;∞;∞;∞;∞;∞;∞;∞;∞;∞;;"
-    echo ";sky;src;$SKY_ROOT/src;"
-    for i in 1 2 3 4 5 6 7 8; do
-      hex="$(gen_hex)"
-      hex="${hex//[^0-9a-fA-F]/}"
-      if [[ -z "$hex" ]]; then
-        hex="0000000$i"
-      fi
-      hex="${hex:0:8}"
-      dec="$(printf "%u" "0x$hex" 2>/dev/null || echo "0")"
-      echo ";episode;$i;file;$i.jpg;segment;O$i;hex;$hex;O${i}_8;$dec;"
-    done
+    echo ";sky;episodes;8;"
+    echo ";omega;rail;${OMEGA_RAIL_HZ:-8888};"
   } > "$manifest"
-  log_info "wrote Ω-sky manifest → $manifest"
 
   {
-    echo ";sky;timeline;epoch;$epoch;ok;"
-    echo ";timeline;episodes;8;omega_hz;$omega_hz;curve;cosine;loop;true;"
-    for from in 1 2 3 4 5 6 7 8; do
-      if [[ "$from" -eq 8 ]]; then
-        to=1
-      else
-        to=$((from + 1))
-      fi
-      echo ";transition;from;$from;to;$to;mode;crossfade;curve;cosine;steps;64;hold_beats;8;"
-    done
+    echo ";sky;epoch;$epoch;curve;cosine;loop;true;"
   } > "$timeline"
-  log_info "wrote Ω-sky timeline → $timeline"
+
+  echo "$tag wrote Ω-sky manifest → $manifest"
+  echo "$tag wrote Ω-sky timeline → $timeline"
 }
 
-sky_cmd() {
-  ensure_dirs
-  write_sky_manifest_and_timeline
-  echo "Ω-sky manifest contents:"
-  cat "$SKY_ROOT/sky;manifest"
-  echo
-  echo "Ω-sky timeline contents:"
-  cat "$SKY_ROOT/sky;timeline"
-}
-
-sky_play() {
-  ensure_dirs
-  local timeline stream omega_hz
-  timeline="$SKY_ROOT/sky;timeline"
-  stream="$SKY_ROOT/sky;stream"
-  if [[ ! -f "$timeline" ]]; then
-    write_sky_manifest_and_timeline
-  fi
-
-  omega_hz="$(grep '^;timeline;episodes;' "$timeline" | awk -F';' '{print $6}' || echo "7777")"
-
-  log_info "Ω-sky play: episodes=8 ω_hz=$omega_hz curve=cosine loop=true"
-  log_info "Streaming state to: $stream"
-  echo ";sky;stream;omega_hz;$omega_hz;running;true;" > "$stream"
-  echo "[refold] Ctrl+C to stop."
-
-  local phases=(
-    0.000 0.016 0.031 0.047 0.062 0.078 0.094 0.109 0.125 0.141
-    0.156 0.172 0.188 0.203 0.219 0.234 0.250 0.266 0.281 0.297
-    0.312 0.328 0.344 0.359 0.375 0.391 0.406 0.422 0.438 0.453
-    0.469 0.484 0.500 0.516 0.531 0.547 0.562 0.578 0.594 0.609
-    0.625 0.641 0.656 0.672 0.688 0.703 0.719 0.734 0.750 0.766
-    0.781 0.797 0.812 0.828 0.844 0.859 0.875 0.891 0.906 0.922
-    0.938 0.953 0.969 0.984 1.000
-  )
-
-  local from=1
-  local to=2
-  while true; do
-    for phase in "${phases[@]}"; do
-      echo "[Ω-sky] crossfade ${from}→${to} ✦ phase $phase / 1.000"
-      printf ';sky;stream;from;%s;to;%s;phase;%s;\n' "$from" "$to" "$phase" > "$stream"
-      sleep 0.05
-    done
-    from=$to
-    if [[ "$to" -eq 8 ]]; then
-      to=1
-    else
-      to=$((to + 1))
-    fi
-  done
-}
-
-# ---------- Kubernetes sync ----------
-kube_sync_universe() {
-  if ! command -v kubectl >/dev/null 2>&1; then
-    log_warn "kubectl not installed; skipping Kubernetes apply."
-    return
-  fi
-  if ! kubectl config current-context >/dev/null 2>&1; then
-    log_warn "kubectl has no current context; skipping Kubernetes apply."
-    return
-  fi
-
-  log_info "Kubernetes provider detected: external"
-  kubectl get ns "$KUBE_NS" >/dev/null 2>&1 || kubectl create namespace "$KUBE_NS" >/dev/null 2>&1
-
-  local universe_dir
-  universe_dir="$KUBE_MANIFEST/universe"
-  if [[ -d "$universe_dir" ]]; then
-    if ls "$universe_dir"/*.yaml >/dev/null 2>&1; then
-      log_info "Applying universe manifests → $universe_dir (namespace $KUBE_NS)"
-      kubectl apply -n "$KUBE_NS" -f "$universe_dir" || log_warn "kubectl apply failed for universe manifests."
-    else
-      log_warn "No universe manifests found under $universe_dir; skipping apply."
-    fi
-  else
-    log_warn "KUBE_MANIFEST directory not found at $KUBE_MANIFEST; skipping apply."
-  fi
-}
-
-# ---------- Flames (UPDATED: default to hz=OMEGA_HZ or 7777) ----------
-flames_cmd() {
-  ensure_dirs
-  local sub="${1:-}"
-  # If called as just `refold.command flames`, default to `hz` using OMEGA_HZ/7777
-  if [[ -z "$sub" ]]; then
-    sub="hz"
-  fi
-
-  case "$sub" in
-    hz)
-      local hz="${2:-${OMEGA_HZ:-7777}}"
-      local height friction file epoch
-      height=7
-      friction="leidenfrost"
-      epoch="$(date +%s)"
-      file="$FLAMES_ROOT/flames;control"
-      {
-        printf ';flames;mode;hz;epoch;%s;hz;%s;height;%s;friction;%s;\n' "$epoch" "$hz" "$height" "$friction"
-      } > "$file"
-      log_info "wrote flames control → $file"
-      echo "Flames control: hz=$hz height=$height friction=$friction"
-      echo "(refold.command itself does not start audio — your Ω-engine must read $file)"
-      ;;
-    up)
-      flames_cmd hz "8888"
-      ;;
-    down)
-      flames_cmd hz "4444"
-      ;;
-    *)
-      echo "Usage: $0 flames hz <freqHz>|up|down"
-      ;;
-  esac
-}
-
-# ---------- Ping / env ----------
-ping_cmd() {
-  ensure_dirs
-  echo "=== refold.command ping ==="
-  log_info "Desktop:      $DESKTOP"
-  log_info "DLOG_ROOT:    $DLOG_ROOT"
-  log_info "STACK_ROOT:   $STACK_ROOT"
-  log_info "UNIVERSE_NS:  $KUBE_NS"
-  log_info "KUBE_MANIFEST:$KUBE_MANIFEST"
-  log_info "OMEGA_ROOT:   $OMEGA_ROOT"
-  log_info "Ω-INF-ROOT:   $INF_ROOT"
-  if ensure_dlog_command; then
-    log_info "dlog.command is present and executable."
-  else
-    log_warn "dlog.command missing or not executable."
-  fi
+apply_kube_universe() {
   if command -v kubectl >/dev/null 2>&1; then
-    log_info "Kubernetes provider detected: external"
-  else
-    log_warn "kubectl not found; Kubernetes integration inactive."
-  fi
-  echo "[Ω][env] OMEGA_ROOT = $OMEGA_ROOT"
-  echo "[Ω][env] DLOG_ROOT  = $DLOG_ROOT"
-}
-
-# ---------- Speakers (Rust engine) ----------
-speakers_cmd() {
-  ensure_dirs
-  echo "=== refold.command speakers ==="
-  local flames_control sky_stream
-  flames_control="$FLAMES_ROOT/flames;control"
-  sky_stream="$SKY_ROOT/sky;stream"
-
-  export OMEGA_ROOT="$OMEGA_ROOT"
-  export FLAMES_CONTROL="${FLAMES_CONTROL:-$flames_control}"
-  export SKY_STREAM="${SKY_STREAM:-$sky_stream}"
-
-  log_info "Running Ω-speakers via cargo run -p omega_speakers"
-  log_info "  FLAMES_CONTROL → $FLAMES_CONTROL"
-  log_info "  SKY_STREAM     → $SKY_STREAM"
-
-  (
-    cd "$DLOG_ROOT"
-    cargo run -p omega_speakers
-  )
-}
-
-# ---------- Supabase brick ----------
-supabase_cmd() {
-  ensure_dirs
-  local supabase_url dlog_domain file epoch
-  supabase_url="${SUPABASE_URL:-$SUPABASE_URL_DEFAULT}"
-  dlog_domain="${DLOG_DOMAIN:-$DLOG_DOMAIN_DEFAULT}"
-  epoch="$(date +%s)"
-
-  echo "=== refold.command supabase ==="
-  log_info "Ω Supabase endpoint: $supabase_url"
-  log_info "Ω Domain: $dlog_domain"
-
-  if command -v curl >/dev/null 2>&1; then
-    log_info "Ω Testing Supabase connectivity..."
-    if curl -sS --max-time 5 "$supabase_url" >/dev/null 2>&1; then
-      log_info "Supabase endpoint reachable ✅"
+    echo "$tag Kubernetes provider detected: external"
+    universe_dir="$KUBE_ROOT/universe"
+    if [ -d "$universe_dir" ]; then
+      echo "$tag Applying universe manifests → $universe_dir (namespace $UNIVERSE_NS)"
+      if ! kubectl apply -f "$universe_dir" -n "$UNIVERSE_NS"; then
+        echo "[refold:warn] kubectl apply failed (safe to ignore for now)"
+      fi
     else
-      log_warn "Supabase endpoint not reachable."
+      echo "$tag No kube/universe manifests at $universe_dir"
     fi
   else
-    log_warn "curl not installed; skipping Supabase connectivity test."
+    echo "$tag Kubernetes provider: none (kubectl not found)"
   fi
-
-  file="$DLOG_ROOT/supabase;status"
-  {
-    echo ";supabase;endpoint;$supabase_url;"
-    echo ";supabase;domain;$dlog_domain;"
-    echo ";supabase;epoch;$epoch;ok;"
-  } > "$file"
-  echo "Ω-DLOG.GOLD Supabase brick loaded."
 }
 
-# ---------- Cleanup stub (for dlog.command) ----------
-cleanup_cmd() {
-  ensure_dirs
-  echo "=== refold.command cleanup ==="
-  echo
-  echo "cleanup is currently a calm stub."
-  echo
-  echo "It exists so dlog.command can safely call:"
-  echo "  refold.command cleanup"
-  echo
-  echo "Future ideas:"
-  echo "  - remove temporary artifacts,"
-  echo "  - rotate logs,"
-  echo "  - compact / archive old universe snapshots."
-  echo
-  echo "Right now it does nothing destructive and always exits 0."
-}
-
-# ---------- Stack-up stub (for dlog.command) ----------
-stack_up_cmd() {
-  ensure_dirs
-  echo "=== refold.command stack-up ==="
-  write_stack_snapshot
-  echo
-  echo "Stack-up complete."
-  echo
-  echo "The Ω-stack snapshot now lives at:"
-  echo "  $STACK_ROOT/stack;universe"
-  echo
-  echo "Format:"
-  echo "  ;stack;epoch;<nowEpoch>;ok;"
-  echo "  ;phone;label;epoch;epoch8;tag;status;"
-}
-
-# ---------- Beat ----------
-beat_cmd() {
-  ensure_dirs
-  echo "=== refold.command beat ==="
-  write_stack_snapshot
-  write_infinity_root
-  write_dashboard
-  write_sky_manifest_and_timeline
-  kube_sync_universe
-  call_dlog beat
-  echo
-  echo "Beat complete."
-  echo
-  echo "This beat:"
-  echo "  - Updated the Ω-stack snapshot at $STACK_ROOT/stack;universe"
-  echo "  - Updated the 9∞ master root under $INF_ROOT"
-  echo "  - Updated the Ω-dashboard at $DASHBOARD_ROOT/dashboard;status"
-  echo "  - Updated the Ω-sky manifest & timeline under $SKY_ROOT"
-  echo "  - Applied universe manifests to Kubernetes (if reachable)"
-  echo "  - Poked dlog.command with 'beat' (if present)"
-}
-
-# ---------- Main dispatcher ----------
-main() {
-  local cmd
-  cmd="${1:-help}"
-  if [[ $# -gt 0 ]]; then
-    shift
+poke_dlog_command() {
+  dlog_cmd="$DESKTOP/dlog.command"
+  if [ -x "$dlog_cmd" ]; then
+    echo "$tag delegating to dlog.command → beat"
+    if ! "$dlog_cmd" beat; then
+      echo "[refold:warn] dlog.command beat exited non-zero"
+    fi
   fi
+}
 
-  case "$cmd" in
-    beat)      beat_cmd "$@" ;;
-    flames)    flames_cmd "$@" ;;
-    sky)
-      local sub="${1:-}"
-      case "$sub" in
-        play) sky_play ;;
-        "" )  sky_cmd ;;
-        * )   echo "Usage: $0 sky [play]" ;;
-      esac
-      ;;
-    supabase)  supabase_cmd "$@" ;;
-    speakers)  speakers_cmd "$@" ;;
-    ping)      ping_cmd ;;
-    cleanup)   cleanup_cmd ;;
-    stack-up)  stack_up_cmd ;;
-    help|--help|-h|"")
-      cat <<EOF
-refold.command — Ω DLOG helper
+# === Subcommand dispatch ====================================================
+subcommand="${1:-help}"
+if [ "$#" -gt 0 ]; then
+  shift
+fi
+
+case "$subcommand" in
+  help)
+    cat <<TXT
+refold.command — Ω-Physics launcher
 
 Usage:
-  ~/Desktop/refold.command beat          # sync stack, 9∞, sky, kube, poke dlog.command
-  ~/Desktop/refold.command stack-up      # standalone stack snapshot stub (for dlog.command)
-  ~/Desktop/refold.command ping          # show environment + kube wiring
-  ~/Desktop/refold.command flames [hz <freqHz>|up|down]
-  ~/Desktop/refold.command sky           # regenerate sky manifest + timeline (print)
-  ~/Desktop/refold.command sky play      # stream Ω-sky crossfade phases (Ctrl+C to stop)
-  ~/Desktop/refold.command speakers      # run Rust Ω-speakers (reads flames + sky)
-  ~/Desktop/refold.command supabase      # log Supabase endpoint + domain brick
-  ~/Desktop/refold.command cleanup       # calm, no-op cleanup stub
+  $0 help
+  $0 ping
+  $0 flames [hz <freqHz>]
+  $0 beat
+  $0 sky play
+  $0 speakers
 
-Environment overrides:
-  DESKTOP, DLOG_ROOT, OMEGA_ROOT, KUBE_NS, KUBE_MANIFEST
-  SUPABASE_URL, DLOG_DOMAIN, OMEGA_HZ
+Notes:
+  - flames: writes control file for Ω-speakers (default 8888 Hz).
+  - beat: snapshots stack, sky, kube, and pokes dlog.command beat.
+  - sky play: prints the crossfade log + writes to sky;stream (Ctrl+C to stop).
+  - speakers: patches + builds + runs omega_speakers (Rust).
+TXT
+    ;;
 
-We do not have limits. We vibe. We are fearless. 🌀
-EOF
-      ;;
-    *)
-      log_err "Unknown subcommand: $cmd"
-      echo "Try: $0 help"
+  ping)
+    ensure_dirs
+    echo "=== refold.command ping ==="
+    echo "$tag Desktop:      $DESKTOP"
+    echo "$tag DLOG_ROOT:    $DLOG_ROOT"
+    echo "$tag STACK_ROOT:   $STACK_ROOT"
+    echo "$tag UNIVERSE_NS:  $UNIVERSE_NS"
+    echo "$tag KUBE_MANIFEST:$KUBE_ROOT"
+    echo "$tag OMEGA_ROOT:   $OMEGA_ROOT"
+    echo "$tag Ω-INF-ROOT:   $INF_ROOT"
+    dlog_cmd="$DESKTOP/dlog.command"
+    if [ -x "$dlog_cmd" ]; then
+      echo "$tag dlog.command is present and executable."
+    else
+      echo "$tag dlog.command not found or not executable."
+    fi
+    if command -v kubectl >/dev/null 2>&1; then
+      echo "$tag Kubernetes provider detected: external"
+    else
+      echo "$tag Kubernetes provider: none (kubectl not found)"
+    fi
+    ;;
+
+  flames)
+    # Usage: refold.command flames [hz <freqHz>]
+    hz=""
+    if [ "${1:-}" = "hz" ]; then
+      shift || true
+      hz="${1:-}"
+    fi
+
+    if [ -z "$hz" ]; then
+      hz="${OMEGA_HZ:-8888}"
+    fi
+
+    ensure_dirs
+    flames_dir="$DLOG_ROOT/flames"
+    mkdir -p "$flames_dir"
+    control_file="$flames_dir/flames;control"
+
+    {
+      echo "hz=$hz"
+      echo "height=7"
+      echo "friction=leidenfrost"
+    } > "$control_file"
+
+    echo "$tag wrote flames control → $control_file"
+    echo "Flames control: hz=$hz height=7 friction=leidenfrost"
+    echo "(refold.command itself does not start audio — your Ω-engine must read $control_file)"
+    ;;
+
+  beat)
+    echo "=== refold.command beat ==="
+    write_stack_snapshot
+    write_infinity_root
+    write_dashboard_snapshot
+    write_sky_manifest
+    apply_kube_universe
+    poke_dlog_command
+
+    cat <<TXT
+Beat complete.
+
+This beat:
+  - Updated the Ω-stack snapshot at $STACK_ROOT/stack;universe
+  - Updated the 9∞ master root under $INF_ROOT
+  - Updated the Ω-dashboard at $DLOG_ROOT/dashboard/dashboard;status
+  - Updated the Ω-sky manifest & timeline under $DLOG_ROOT/sky
+  - Applied universe manifests to Kubernetes (if reachable)
+  - Poked dlog.command with 'beat' (if present)
+TXT
+    ;;
+
+  sky)
+    action="${1:-play}"
+    if [ "$action" != "play" ]; then
+      echo "[refold:err] sky: unknown action '$action'"
       exit 1
-      ;;
-  esac
+    fi
+
+    ensure_dirs
+    stream="$DLOG_ROOT/sky/sky;stream"
+    : > "$stream"
+    omega_hz="${OMEGA_RAIL_HZ:-8888}"
+
+    echo "$tag Ω-sky play: episodes=8 ω_hz=$omega_hz curve=cosine loop=true"
+    echo "$tag Streaming state to: $stream"
+    echo "$tag Ctrl+C to stop."
+
+    ep=1
+    next_ep=2
+    steps=62
+    step=0
+    while true; do
+      phase_num=$step
+      phase_den=$steps
+      phase=$(awk "BEGIN { printf \"%.3f\", $phase_num / $phase_den }")
+      printf "[Ω-sky] crossfade %d→%d ✦ phase %s / 1.000\n" "$ep" "$next_ep" "$phase"
+      printf "%d %d %s\n" "$ep" "$next_ep" "$phase" >> "$stream"
+
+      step=$((step + 1))
+      if [ "$step" -gt "$steps" ]; then
+        step=0
+        ep=$next_ep
+        next_ep=$(( (ep % 8) + 1 ))
+      fi
+      sleep 0.016
+    done
+    ;;
+
+  speakers)
+    echo "=== refold.command speakers ==="
+    echo "$tag Ω-speakers: patching omega_speakers/src/main.rs for 8888 rail + 333–999 whoosh…"
+
+    SRC="$DLOG_ROOT/omega_speakers/src/main.rs"
+    mkdir -p "$(dirname "$SRC")"
+
+    cat > "$SRC" <<'RUST'
+use std::env;
+use std::time::{Duration, Instant};
+
+use rand::Rng;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+use rodio::{OutputStream, Sink, Source};
+
+fn env_f32(key: &str, default: f32) -> f32 {
+    env::var(key)
+        .ok()
+        .and_then(|s| s.parse::<f32>().ok())
+        .unwrap_or(default)
 }
 
-main "$@"
+const VOICES: usize = 4;
+
+struct OmegaSource {
+    sample_rate: u32,
+    rail_hz: f32,
+    omega_gain: f32,
+
+    whoosh_min_hz: f32,
+    whoosh_max_hz: f32,
+    whoosh_freq: f32,
+    whoosh_target_freq: f32,
+    whoosh_phases: [f32; VOICES],
+    whoosh_detune: [f32; VOICES],
+
+    rail_phase: f32,
+    t: f64,
+    whoosh_change_interval: f32,
+    whoosh_time_since_change: f32,
+
+    rng: StdRng,
+    start: Instant,
+    last_log: Instant,
+}
+
+impl OmegaSource {
+    fn new(
+        sample_rate: u32,
+        rail_hz: f32,
+        omega_gain: f32,
+        whoosh_min_hz: f32,
+        whoosh_max_hz: f32,
+    ) -> Self {
+        // Deterministic 32-byte seed built from a 64-bit constant
+        let base = 0xD10D_8888_u64.to_le_bytes();
+        let mut seed = [0u8; 32];
+        for i in 0..4 {
+            seed[i * 8..(i + 1) * 8].copy_from_slice(&base);
+        }
+        let mut rng = StdRng::from_seed(seed);
+
+        let init_freq = rng.gen_range(whoosh_min_hz..whoosh_max_hz);
+        let mut detune = [1.0f32; VOICES];
+        for d in detune.iter_mut() {
+            *d = rng.gen_range(0.9..1.1);
+        }
+        let now = Instant::now();
+
+        Self {
+            sample_rate,
+            rail_hz,
+            omega_gain,
+            whoosh_min_hz,
+            whoosh_max_hz,
+            whoosh_freq: init_freq,
+            whoosh_target_freq: init_freq,
+            whoosh_phases: [0.0; VOICES],
+            whoosh_detune: detune,
+            rail_phase: 0.0,
+            t: 0.0,
+            whoosh_change_interval: 4.0,
+            whoosh_time_since_change: 0.0,
+            rng,
+            start: now,
+            last_log: now,
+        }
+    }
+}
+
+impl Iterator for OmegaSource {
+    type Item = f32;
+
+    fn next(&mut self) -> Option<f32> {
+        let dt = 1.0 / self.sample_rate as f32;
+        self.t += dt as f64;
+
+        // timing rail at rail_hz (8888 by default)
+        self.rail_phase += self.rail_hz * dt;
+        if self.rail_phase >= 1.0 {
+            self.rail_phase -= 1.0;
+        }
+        let rail = (2.0 * std::f32::consts::PI * self.rail_phase).sin();
+
+        // whoosh band 333–999 Hz, gently wandering
+        self.whoosh_time_since_change += dt;
+        if self.whoosh_time_since_change >= self.whoosh_change_interval {
+            self.whoosh_time_since_change = 0.0;
+            self.whoosh_target_freq = self
+                .rng
+                .gen_range(self.whoosh_min_hz..self.whoosh_max_hz);
+        }
+
+        // glide slowly toward new target so it feels alive, not steppy
+        let glide = 0.002;
+        self.whoosh_freq += (self.whoosh_target_freq - self.whoosh_freq) * glide;
+
+        // 4 detuned voices around the whoosh frequency
+        let mut whoosh_sum = 0.0f32;
+        for i in 0..VOICES {
+            self.whoosh_phases[i] += self.whoosh_freq * self.whoosh_detune[i] * dt;
+            if self.whoosh_phases[i] >= 1.0 {
+                self.whoosh_phases[i] -= 1.0;
+            }
+            whoosh_sum += (2.0 * std::f32::consts::PI * self.whoosh_phases[i]).sin();
+        }
+        whoosh_sum /= VOICES as f32;
+
+        // noise to make it "blowtorch / ocean" instead of pure tone
+        let noise: f32 = self.rng.gen_range(-1.0..1.0);
+        let whoosh = whoosh_sum * 0.5 + noise * 0.5;
+
+        // mix rail + whoosh bed
+        let sample = self.omega_gain * (rail * 0.25 + whoosh * 0.75);
+
+        // periodic status log like the old python engine
+        let now = Instant::now();
+        if now.duration_since(self.last_log) >= Duration::from_secs(1) {
+            self.last_log = now;
+            let t_sec = now.duration_since(self.start).as_secs_f32();
+            println!(
+                "[Ω] t={:6.2}s rail={:7.2}Hz whoosh≈{:7.2}Hz gain={:.6}",
+                t_sec, self.rail_hz, self.whoosh_freq, self.omega_gain
+            );
+        }
+
+        Some(sample)
+    }
+}
+
+impl Source for OmegaSource {
+    fn current_frame_len(&self) -> Option<usize> {
+        None
+    }
+
+    fn channels(&self) -> u16 {
+        1
+    }
+
+    fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    fn total_duration(&self) -> Option<std::time::Duration> {
+        None
+    }
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let omega_root = env::var("OMEGA_ROOT").unwrap_or_else(|_| ".".to_string());
+    let control_file = format!("{}/flames/flames;control", omega_root);
+    let sky_stream = format!("{}/sky/sky;stream", omega_root);
+
+    let rail_hz = env_f32("OMEGA_RAIL_HZ", 8888.0);
+    let whoosh_min_hz = env_f32("OMEGA_WHOOSH_MIN_HZ", 333.0);
+    let whoosh_max_hz = env_f32("OMEGA_WHOOSH_MAX_HZ", 999.0);
+    let omega_gain = env_f32("OMEGA_GAIN", 0.04);
+
+    println!("=== Ω Rust Speaker Engine (Φ Harmonic Bloom) ===");
+    println!("[+] OMEGA_ROOT     : {}", omega_root);
+    println!("[+] Control File   : {}", control_file);
+    println!("[+] Sky Stream     : {}", sky_stream);
+    println!("[+] Rail Hz        : {:.2}", rail_hz);
+    println!(
+        "[+] Whoosh Band    : {:.2} .. {:.2} Hz",
+        whoosh_min_hz, whoosh_max_hz
+    );
+    println!("[+] Gain           : {:.6}", omega_gain);
+    println!("[+] Output         : 4-voice golden field engaged ✨🌀");
+
+    let (_stream, stream_handle) = OutputStream::try_default()?;
+    let sink = Sink::try_new(&stream_handle)?;
+
+    let sample_rate = 44_100u32;
+    let src = OmegaSource::new(sample_rate, rail_hz, omega_gain, whoosh_min_hz, whoosh_max_hz);
+
+    sink.append(src);
+    sink.sleep_until_end();
+
+    Ok(())
+}
+RUST
+
+    echo "$tag Building omega_speakers crate…"
+    (
+      cd "$DLOG_ROOT" && \
+      cargo build -p omega_speakers
+    ) || {
+      echo "[refold:err] cargo build failed for omega_speakers"; exit 1;
+    }
+
+    echo "$tag Launching omega_speakers (dev profile)…"
+    export OMEGA_ROOT="$DLOG_ROOT"
+    export OMEGA_RAIL_HZ="${OMEGA_RAIL_HZ:-8888}"
+    export OMEGA_WHOOSH_MIN_HZ="${OMEGA_WHOOSH_MIN_HZ:-333}"
+    export OMEGA_WHOOSH_MAX_HZ="${OMEGA_WHOOSH_MAX_HZ:-999}"
+    export OMEGA_GAIN="${OMEGA_GAIN:-0.04}"
+
+    "$DLOG_ROOT/target/debug/omega_speakers"
+    ;;
+
+  stack-up)
+    echo "=== refold.command stack-up ==="
+    write_stack_snapshot
+    cat <<TXT
+Stack-up complete.
+
+The Ω-stack snapshot now lives at:
+  $STACK_ROOT/stack;universe
+
+Format:
+  ;stack;epoch;<nowEpoch>;ok;
+  ;phone;label;epoch;epoch8;tag;status;
+TXT
+    ;;
+
+  cleanup)
+    echo "=== refold.command cleanup ==="
+    echo
+    echo "cleanup is currently a calm stub."
+    echo
+    echo "It exists so dlog.command can safely call:"
+    echo "  refold.command cleanup"
+    echo
+    echo "Future ideas:"
+    echo "  - remove temporary artifacts,"
+    echo "  - rotate logs,"
+    echo "  - compact / archive old universe snapshots."
+    echo
+    echo "Right now it does nothing destructive and always exits 0."
+    ;;
+
+  *)
+    echo "[refold:err] Unknown subcommand: $subcommand"
+    echo "Try: $0 help"
+    exit 1
+    ;;
+esac

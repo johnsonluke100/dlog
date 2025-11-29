@@ -1,10 +1,1 @@
-;sky;timeline;epoch;1764370061;ok;
-;timeline;episodes;8;omega_hz;7777;curve;cosine;loop;true;
-;transition;from;1;to;2;mode;crossfade;curve;cosine;steps;64;hold_beats;8;
-;transition;from;2;to;3;mode;crossfade;curve;cosine;steps;64;hold_beats;8;
-;transition;from;3;to;4;mode;crossfade;curve;cosine;steps;64;hold_beats;8;
-;transition;from;4;to;5;mode;crossfade;curve;cosine;steps;64;hold_beats;8;
-;transition;from;5;to;6;mode;crossfade;curve;cosine;steps;64;hold_beats;8;
-;transition;from;6;to;7;mode;crossfade;curve;cosine;steps;64;hold_beats;8;
-;transition;from;7;to;8;mode;crossfade;curve;cosine;steps;64;hold_beats;8;
-;transition;from;8;to;1;mode;crossfade;curve;cosine;steps;64;hold_beats;8;
+;sky;epoch;1764376463;curve;cosine;loop;true;
