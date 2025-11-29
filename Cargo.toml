@@ -3,7 +3,7 @@ members = [
     "spec",
     "corelib",
     "core",
-    "api", "omega_speakers",
+    "api", "omega_speakers", "dlog_gold_http",
 ]
 resolver = "2"
 

@@ -1,39 +1,32 @@
-# Dockerfile – build a dlog-api container (Rust-only spine, no JS/Java/Python).
-
-# Builder image
-FROM rust:1.80 as builder
+# 1) Build stage: compile the dlog_gold_http crate
+FROM rust:1.82-bullseye AS builder
 
 WORKDIR /app
 
-# Copy the whole workspace; Docker cache will reuse build layers when possible.
+# Copy workspace manifest files
+COPY Cargo.toml Cargo.lock ./
+
+# Copy the whole workspace (gcloudignore will keep it light)
 COPY . .
 
-# Build the dlog-api binary in release mode.
-RUN cargo build --release -p dlog-api
+# Build only the HTTP gateway crate
+RUN cargo build --release -p dlog_gold_http
 
-# Runtime image – thin Debian with just the binary.
-FROM debian:12-slim
+# 2) Runtime stage: small Debian image with just the binary
+FROM debian:bullseye-slim
 
-# Minimal runtime deps.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates && \
+    apt-get install -y ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy compiled binary from builder stage.
-COPY --from=builder /app/target/release/dlog-api /usr/local/bin/dlog-api
+# Copy the compiled binary from the builder image
+COPY --from=builder /app/target/release/dlog_gold_http /app/dlog_gold_http
 
-# Default runtime env (overridable).
-ENV DLOG_RUNTIME_MODE=container_supabase
-ENV DLOG_BIND=0.0.0.0
-ENV DLOG_PORT=8888
+# Cloud Run will inject $PORT; default is 8080
+ENV PORT=8080
 
-# Optional Supabase envs can be injected by the orchestrator.
-ENV SUPABASE_URL=""
-ENV SUPABASE_ANON_KEY=""
+EXPOSE 8080
 
-EXPOSE 8888
-
-# Rust spine, no script glue: just run the binary.
-CMD [ "dlog-api" ]
+CMD ["./dlog_gold_http"]
