@@ -1,2 +1,4 @@
-;9∞;epoch;1764480866;
-;omega;root;ok;
+epoch=1764483315
+root=9∞
+project=dlog-gold
+region=us-central1

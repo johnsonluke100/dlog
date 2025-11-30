@@ -7,3 +7,30 @@ band=04 ip=<none>
 band=05 ip=<none>
 band=06 ip=<none>
 band=07 ip=<none>
+epoch=1764481823 rail_hz=8888 bands=8
+band=00 ip=<none>
+band=01 ip=<none>
+band=02 ip=<none>
+band=03 ip=<none>
+band=04 ip=<none>
+band=05 ip=<none>
+band=06 ip=<none>
+band=07 ip=<none>
+epoch=1764482473 rail_hz=8888 bands=8
+band=00 ip=<none>
+band=01 ip=<none>
+band=02 ip=<none>
+band=03 ip=<none>
+band=04 ip=<none>
+band=05 ip=<none>
+band=06 ip=<none>
+band=07 ip=<none>
+epoch=1764483546 railHz=8888 bands=8
+band00=<none>
+band01=<none>
+band02=<none>
+band03=<none>
+band04=<none>
+band05=<none>
+band06=<none>
+band07=<none>
