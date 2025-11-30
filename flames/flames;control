@@ -1,1 +1,3 @@
-;flames;hz;8888;height;7;friction;leidenfrost;
+hz=8888
+height=7
+friction=leidenfrost

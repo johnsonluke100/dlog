@@ -1,83 +1,159 @@
-1 2 0.000
-1 2 0.016
-1 2 0.032
-1 2 0.048
-1 2 0.065
-1 2 0.081
-1 2 0.097
-1 2 0.113
-1 2 0.129
-1 2 0.145
-1 2 0.161
-1 2 0.177
-1 2 0.194
-1 2 0.210
-1 2 0.226
-1 2 0.242
-1 2 0.258
-1 2 0.274
-1 2 0.290
-1 2 0.306
-1 2 0.323
-1 2 0.339
-1 2 0.355
-1 2 0.371
-1 2 0.387
-1 2 0.403
-1 2 0.419
-1 2 0.435
-1 2 0.452
-1 2 0.468
-1 2 0.484
-1 2 0.500
-1 2 0.516
-1 2 0.532
-1 2 0.548
-1 2 0.565
-1 2 0.581
-1 2 0.597
-1 2 0.613
-1 2 0.629
-1 2 0.645
-1 2 0.661
-1 2 0.677
-1 2 0.694
-1 2 0.710
-1 2 0.726
-1 2 0.742
-1 2 0.758
-1 2 0.774
-1 2 0.790
-1 2 0.806
-1 2 0.823
-1 2 0.839
-1 2 0.855
-1 2 0.871
-1 2 0.887
-1 2 0.903
-1 2 0.919
-1 2 0.935
-1 2 0.952
-1 2 0.968
-1 2 0.984
-1 2 1.000
-2 3 0.000
-2 3 0.016
-2 3 0.032
-2 3 0.048
-2 3 0.065
-2 3 0.081
-2 3 0.097
-2 3 0.113
-2 3 0.129
-2 3 0.145
-2 3 0.161
-2 3 0.177
-2 3 0.194
-2 3 0.210
-2 3 0.226
-2 3 0.242
-2 3 0.258
-2 3 0.274
-2 3 0.290
-2 3 0.306
+crossfade;1;2;0.016
+crossfade;1;2;0.031
+crossfade;1;2;0.047
+crossfade;1;2;0.062
+crossfade;1;2;0.078
+crossfade;1;2;0.094
+crossfade;1;2;0.109
+crossfade;1;2;0.125
+crossfade;1;2;0.141
+crossfade;1;2;0.156
+crossfade;1;2;0.172
+crossfade;1;2;0.188
+crossfade;1;2;0.203
+crossfade;1;2;0.219
+crossfade;1;2;0.234
+crossfade;1;2;0.250
+crossfade;1;2;0.266
+crossfade;1;2;0.281
+crossfade;1;2;0.297
+crossfade;1;2;0.312
+crossfade;1;2;0.328
+crossfade;1;2;0.344
+crossfade;1;2;0.359
+crossfade;1;2;0.375
+crossfade;1;2;0.391
+crossfade;1;2;0.406
+crossfade;1;2;0.422
+crossfade;1;2;0.438
+crossfade;1;2;0.453
+crossfade;1;2;0.469
+crossfade;1;2;0.484
+crossfade;1;2;0.500
+crossfade;1;2;0.516
+crossfade;1;2;0.531
+crossfade;1;2;0.547
+crossfade;1;2;0.562
+crossfade;1;2;0.578
+crossfade;1;2;0.594
+crossfade;1;2;0.609
+crossfade;1;2;0.625
+crossfade;1;2;0.641
+crossfade;1;2;0.656
+crossfade;1;2;0.672
+crossfade;1;2;0.688
+crossfade;1;2;0.703
+crossfade;1;2;0.719
+crossfade;1;2;0.734
+crossfade;1;2;0.750
+crossfade;1;2;0.766
+crossfade;1;2;0.781
+crossfade;1;2;0.797
+crossfade;1;2;0.812
+crossfade;1;2;0.828
+crossfade;1;2;0.844
+crossfade;1;2;0.859
+crossfade;1;2;0.875
+crossfade;1;2;0.891
+crossfade;1;2;0.906
+crossfade;1;2;0.922
+crossfade;1;2;0.938
+crossfade;1;2;0.953
+crossfade;1;2;0.969
+crossfade;1;2;0.984
+crossfade;1;2;1.000
+crossfade;2;3;0.016
+crossfade;2;3;0.031
+crossfade;2;3;0.047
+crossfade;2;3;0.062
+crossfade;2;3;0.078
+crossfade;2;3;0.094
+crossfade;2;3;0.109
+crossfade;2;3;0.125
+crossfade;2;3;0.141
+crossfade;2;3;0.156
+crossfade;2;3;0.172
+crossfade;2;3;0.188
+crossfade;2;3;0.203
+crossfade;2;3;0.219
+crossfade;2;3;0.234
+crossfade;2;3;0.250
+crossfade;2;3;0.266
+crossfade;2;3;0.281
+crossfade;2;3;0.297
+crossfade;2;3;0.312
+crossfade;2;3;0.328
+crossfade;2;3;0.344
+crossfade;2;3;0.359
+crossfade;2;3;0.375
+crossfade;2;3;0.391
+crossfade;2;3;0.406
+crossfade;2;3;0.422
+crossfade;2;3;0.438
+crossfade;2;3;0.453
+crossfade;2;3;0.469
+crossfade;2;3;0.484
+crossfade;2;3;0.500
+crossfade;2;3;0.516
+crossfade;2;3;0.531
+crossfade;2;3;0.547
+crossfade;2;3;0.562
+crossfade;2;3;0.578
+crossfade;2;3;0.594
+crossfade;2;3;0.609
+crossfade;2;3;0.625
+crossfade;2;3;0.641
+crossfade;2;3;0.656
+crossfade;2;3;0.672
+crossfade;2;3;0.688
+crossfade;2;3;0.703
+crossfade;2;3;0.719
+crossfade;2;3;0.734
+crossfade;2;3;0.750
+crossfade;2;3;0.766
+crossfade;2;3;0.781
+crossfade;2;3;0.797
+crossfade;2;3;0.812
+crossfade;2;3;0.828
+crossfade;2;3;0.844
+crossfade;2;3;0.859
+crossfade;2;3;0.875
+crossfade;2;3;0.891
+crossfade;2;3;0.906
+crossfade;2;3;0.922
+crossfade;2;3;0.938
+crossfade;2;3;0.953
+crossfade;2;3;0.969
+crossfade;2;3;0.984
+crossfade;2;3;1.000
+crossfade;3;4;0.016
+crossfade;3;4;0.031
+crossfade;3;4;0.047
+crossfade;3;4;0.062
+crossfade;3;4;0.078
+crossfade;3;4;0.094
+crossfade;3;4;0.109
+crossfade;3;4;0.125
+crossfade;3;4;0.141
+crossfade;3;4;0.156
+crossfade;3;4;0.172
+crossfade;3;4;0.188
+crossfade;3;4;0.203
+crossfade;3;4;0.219
+crossfade;3;4;0.234
+crossfade;3;4;0.250
+crossfade;3;4;0.266
+crossfade;3;4;0.281
+crossfade;3;4;0.297
+crossfade;3;4;0.312
+crossfade;3;4;0.328
+crossfade;3;4;0.344
+crossfade;3;4;0.359
+crossfade;3;4;0.375
+crossfade;3;4;0.391
+crossfade;3;4;0.406
+crossfade;3;4;0.422
+crossfade;3;4;0.438
+crossfade;3;4;0.453
+crossfade;3;4;0.469
+crossfade;3;4;0.484
