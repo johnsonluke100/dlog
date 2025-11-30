@@ -1,538 +1,389 @@
 #!/usr/bin/env bash
+# ============================================================
+# refold.command — Ω-physics + Cloud Run + domains + shields
+# ============================================================
+# Entry points (from anywhere, usually in ~/Desktop/dlog):
 #
-# ===================== Ω refold.command =====================
-# DLOG / Ω-physics conductor
-# -------------------------------------------------------------
-# This file is the "one switchboard" for:
-#   - Ω-stack beats, sky, flames, speakers
-#   - dlog.gold / goldengold.gold / nedlog.gold domains
-#   - Cloud Run deploys (dlog-gold-app)
-#   - Shields (Cloud Armor hook, placeholder-safe)
+#   ~/Desktop/refold.command ping
+#   ~/Desktop/refold.command beat
+#   ~/Desktop/refold.command flames [hz 8888]
+#   ~/Desktop/refold.command sky play
 #
-# Philosophy:
-#   - No hard limits
-#   - Scripts are friendly, verbose, and reversible
-#   - Everything important is idempotent (safe to re-run)
-# =============================================================
+#   ~/Desktop/refold.command deploy
+#   ~/Desktop/refold.command domains status
+#   ~/Desktop/refold.command domains map
+#
+#   BACKEND_SERVICE="dlog-gold-backend" ~/Desktop/refold.command shields
+#
+# No limits. Just flow.
+# ------------------------------------------------------------
 
 set -euo pipefail
 
-# ------------------ GLOBAL DEFAULTS ---------------------------
+# ---------- core env -------------------------------------------------
+
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 DLOG_ROOT="${DLOG_ROOT:-$HOME/Desktop/dlog}"
 OMEGA_ROOT="${OMEGA_ROOT:-$DLOG_ROOT}"
 
 PROJECT_ID="${PROJECT_ID:-dlog-gold}"
 RUN_REGION="${RUN_REGION:-us-central1}"
-RUN_PLATFORM="managed"
+RUN_PLATFORM="${RUN_PLATFORM:-managed}"
 
 CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-dlog-gold-app}"
 
-# Trio of domains you own / are wiring
-DOMAINS=(
-  "dlog.gold"
-  "goldengold.gold"
-  "nedlog.gold"
-)
+export DLOG_ROOT OMEGA_ROOT PROJECT_ID RUN_REGION RUN_PLATFORM CLOUD_RUN_SERVICE
 
-# Flames + sky files
-FLAMES_DIR="$DLOG_ROOT/flames"
-SKY_DIR="$DLOG_ROOT/sky"
-STACK_DIR="$DLOG_ROOT/stack"
-DASHBOARD_DIR="$DLOG_ROOT/dashboard"
-KUBE_DIR="$DLOG_ROOT/kube"
-OMEGA_INF="$DLOG_ROOT/∞"
+# Domains that belong to this Ω-universe
+DLOG_DOMAINS=("dlog.gold" "goldengold.gold" "nedlog.gold")
 
-# Used by various bits
-TIMESTAMP() {
-  date +"%Y-%m-%d %H:%M:%S"
+# ---------- helpers --------------------------------------------------
+
+_log() {
+  # timestamped message
+  local now
+  now="$(date '+%Y-%m-%d %H:%M:%S')"
+  printf '[%s] %s\n' "$now" "$*"
 }
 
-log() {
-  # log "label" "message"
-  # or log "message"
-  if [ "$#" -eq 1 ]; then
-    printf '[%s] %s\n' "$(TIMESTAMP)" "$1"
-  else
-    local tag="$1"; shift
-    printf '[%s] [%s] %s\n' "$(TIMESTAMP)" "$tag" "$*"
-  fi
+_have() {
+  command -v "$1" >/dev/null 2>&1
 }
 
-need() {
-  # require a binary to be installed
-  local bin="$1"
-  if ! command -v "$bin" >/dev/null 2>&1; then
-    log "MISS" "Need '$bin' in PATH but it's not installed."
-    return 1
-  fi
+_ensure_gcloud_context() {
+  gcloud config set core/project "$PROJECT_ID" >/dev/null 2>&1 || true
+  gcloud config set run/platform "$RUN_PLATFORM" >/dev/null 2>&1 || true
+  gcloud config set run/region "$RUN_REGION" >/dev/null 2>&1 || true
 }
 
-# ------------------ ENV / PING -------------------------------
+# ---------- Ω: ping / beat / flames / sky ----------------------------
 
-cmd_ping() {
-  echo "=== refold.command ping ==="
-  echo "Desktop:      $HOME/Desktop"
-  echo "DLOG_ROOT:    $DLOG_ROOT"
-  echo "OMEGA_ROOT:   $OMEGA_ROOT"
-  echo "STACK_ROOT:   $STACK_DIR"
-  echo "UNIVERSE_NS:  dlog-universe"
-  echo "KUBE_MANIFEST:$KUBE_DIR"
-  echo "Ω-INF-ROOT:   $OMEGA_INF"
-  echo "PROJECT_ID:   $PROJECT_ID"
-  echo "RUN_REGION:   $RUN_REGION"
-  echo "RUN_PLATFORM: $RUN_PLATFORM"
-}
-
-# ------------------ BEAT / STACK -----------------------------
-
-cmd_beat() {
-  echo "=== refold.command beat ==="
-
-  mkdir -p "$STACK_DIR" "$DASHBOARD_DIR" "$SKY_DIR" "$OMEGA_INF"
-
-  local epoch
-  epoch="$(date +%s)"
-
-  # 1) stack snapshot
-  local stack_file="$STACK_DIR/stack;universe"
-  {
-    echo ";stack;epoch;$epoch;ok;"
-    echo ";phone;label;epoch;epoch8;tag;status;"
-  } > "$stack_file"
-  log "beat" "wrote stack snapshot → $stack_file"
-
-  # 2) 9∞ master root
-  local root_dir="$OMEGA_INF/;∞;∞;∞;∞;∞;∞;∞;∞;∞;"
-  mkdir -p "$root_dir"
-  echo ";9∞;epoch;$epoch;" > "$root_dir/9∞.txt"
-  log "beat" "wrote 9∞ master root → $root_dir"
-
-  # 3) dashboard snapshot
-  local dash_file="$DASHBOARD_DIR/dashboard;status"
-  {
-    echo ";dashboard;epoch;$epoch;status;ok;"
-  } > "$dash_file"
-  log "beat" "wrote Ω-dashboard snapshot → $dash_file"
-
-  # 4) sky manifest & timeline
-  local manifest="$SKY_DIR/sky;manifest"
-  local timeline="$SKY_DIR/sky;timeline"
-  echo ";sky;epoch;$epoch;episodes;8;" > "$manifest"
-  echo ";sky;timeline;epoch;$epoch;curve;cosine;" > "$timeline"
-  log "beat" "wrote Ω-sky manifest & timeline → $SKY_DIR"
-
-  # 5) apply kube manifests if present
-  if [ -d "$KUBE_DIR/universe" ] && command -v kubectl >/dev/null 2>&1; then
-    log "beat" "Kubernetes provider detected: external (kubectl present)"
-    kubectl apply -n dlog-universe -f "$KUBE_DIR/universe" || \
-      log "beat" "kubectl apply failed (universe) – continuing"
-  else
-    log "beat" "no kube universe manifests found or kubectl missing (skip apply)"
-  fi
-
-  # 6) poke dlog.command beat (if present)
-  if [ -x "$HOME/Desktop/dlog.command" ]; then
-    log "beat" "delegating to dlog.command → beat"
-    "$HOME/Desktop/dlog.command" beat || \
-      log "beat" "dlog.command beat returned non-zero (safe to ignore)"
-  fi
-
-  echo "Beat complete."
-  echo
-  echo "This beat:"
-  echo "  - Updated Ω-stack snapshot  → $stack_file"
-  echo "  - Updated 9∞ master root    → $root_dir"
-  echo "  - Updated Ω-dashboard       → $dash_file"
-  echo "  - Updated Ω-sky manifest    → $manifest"
-}
-
-# ------------------ FLAMES CONTROL ---------------------------
-
-cmd_flames() {
-  # Usage:
-  #   refold.command flames
-  #   refold.command flames hz 8888
-  local hz="8888"
-
-  if [ "${1:-}" = "hz" ] && [ "${2:-}" != "" ]; then
-    hz="$2"
-    shift 2 || true
-  fi
-
-  mkdir -p "$FLAMES_DIR"
-  local file="$FLAMES_DIR/flames;control"
-
-  {
-    echo "hz=$hz"
-    echo "height=7"
-    echo "friction=leidenfrost"
-  } > "$file"
-
-  echo "[refold] wrote flames control → $file"
-  echo "Flames control: hz=$hz height=7 friction=leidenfrost"
-  echo "(refold.command itself does not start audio — your Ω-engine must read $file)"
-}
-
-# ------------------ SKY LOG PLAYBACK -------------------------
-
-cmd_sky() {
-  local sub="${1:-play}"
-  shift || true
-
-  case "$sub" in
-    play)
-      cmd_sky_play "$@"
-      ;;
-    tail)
-      cmd_sky_tail "$@"
-      ;;
-    *)
-      echo "Usage: $0 sky {play|tail}"
-      return 1
-      ;;
-  esac
-}
-
-cmd_sky_play() {
-  echo "=== refold.command sky play ==="
-
-  mkdir -p "$SKY_DIR"
-  local stream="$SKY_DIR/sky;stream"
-
-  # simulate a loggy crossfade engine; this is log-only, no audio
-  : > "$stream"
-  log "Ω-sky" "Streaming state to: $stream"
-  log "Ω-sky" "episodes=8 ω_hz=7777 curve=cosine loop=true"
-
-  # simple loop to print fake crossfades
-  local i=1
-  local from=1
-  local to=2
-  while [ $i -le 64 ]; do
-    local phase
-    phase=$(printf "%.3f" "$(echo "$i / 64" | bc -l 2>/dev/null || echo 0)")
-    printf "[Ω-sky] crossfade %d→%d ✦ phase %s / 1.000\n" "$from" "$to" "$phase"
-    echo "crossfade;$from;$to;$phase" >> "$stream"
-    i=$((i + 1))
-    if [ "$i" -gt 64 ]; then
-      i=1
-      from=$(( (from % 8) + 1 ))
-      to=$(( (from % 8) + 1 ))
-    fi
-    sleep 0.02
-  done
-}
-
-cmd_sky_tail() {
-  echo "=== refold.command sky tail ==="
-  local stream="$SKY_DIR/sky;stream"
-  if [ ! -f "$stream" ]; then
-    echo "[sky] no stream file at $stream"
-    return 1
-  fi
-  tail -f "$stream"
-}
-
-# ------------------ SPEAKERS (Ω audio bed) -------------------
-
-cmd_speakers() {
-  echo "=== refold.command speakers ==="
-  echo "[refold] Ω-speakers: invoking cargo run -p omega_speakers"
-  cd "$DLOG_ROOT"
-  if ! command -v cargo >/dev/null 2>&1; then
-    echo "[speakers] cargo not installed; cannot run omega_speakers"
-    return 1
-  fi
-
-  # Let environment drive RAIL / WHOOSH if you export them
-  export OMEGA_RAIL_HZ="${OMEGA_RAIL_HZ:-8888}"
-  export OMEGA_WHOOSH_MIN_HZ="${OMEGA_WHOOSH_MIN_HZ:-333}"
-  export OMEGA_WHOOSH_MAX_HZ="${OMEGA_WHOOSH_MAX_HZ:-999}"
-
-  cargo run -p omega_speakers
-}
-
-# ------------------ DOMAINS (status + map) -------------------
-
-_domains_describe() {
-  local domain="$1"
-
-  gcloud beta run domain-mappings describe \
-    --domain "$domain" \
-    2>/tmp/refold-domain-"$domain".err || return 1
-}
-
-_domains_print_conditions() {
-  local domain="$1"
-
-  if ! _domains_describe "$domain" >/tmp/refold-domain-"$domain".yaml; then
-    local err
-    err="$(cat /tmp/refold-domain-"$domain".err || true)"
-    echo "  (no domain-mapping found for $domain in $RUN_REGION)"
-    if [ -n "$err" ]; then
-      echo "  error: $err"
-    fi
-    return
-  fi
-
-  python3 - << 'EOF' 2>/dev/null || cat /tmp/refold-domain-'"$domain"'.yaml
-import sys, yaml, textwrap
-data = yaml.safe_load(sys.stdin.read())
-conds = data.get("status", {}).get("conditions", [])
-if not conds:
-    print("  (no conditions on domain-mapping)")
-    sys.exit(0)
-types   = [c.get("type") for c in conds]
-status  = [c.get("status") for c in conds]
-message = [c.get("message") for c in conds]
-print("TYPE                                                   STATUS                    MESSAGE")
-print(f"{types!r:<55}  {status!r:<24}  {message!r}")
+_refold_ping() {
+  cat <<EOF
+=== refold.command ping ===
+Desktop:      $HOME/Desktop
+DLOG_ROOT:    $DLOG_ROOT
+OMEGA_ROOT:   $OMEGA_ROOT
+STACK_ROOT:   $DLOG_ROOT/stack
+UNIVERSE_NS:  dlog-universe
+KUBE_MANIFEST:$DLOG_ROOT/kube
+Ω-INF-ROOT:   $DLOG_ROOT/∞
+PROJECT_ID:   $PROJECT_ID
+RUN_REGION:   $RUN_REGION
+RUN_PLATFORM: $RUN_PLATFORM
+CLOUD_RUN_SERVICE: $CLOUD_RUN_SERVICE
 EOF
 }
 
-cmd_domains_status() {
-  echo "=== 🌐 DLOG DOMAINS – status (DNS + certs) ==="
-  gcloud config set project "$PROJECT_ID" >/dev/null
-  gcloud config set run/platform "$RUN_PLATFORM" >/dev/null
-  gcloud config set run/region "$RUN_REGION" >/dev/null
+_refold_beat() {
+  local now epoch
+  now="$(date '+%Y-%m-%d %H:%M:%S')"
+  epoch="$(date +%s)"
 
-  need dig || true
-  need gcloud || true
+  mkdir -p "$DLOG_ROOT/stack" "$DLOG_ROOT/∞" "$DLOG_ROOT/dashboard" "$DLOG_ROOT/sky"
 
-  for domain in "${DOMAINS[@]}"; do
-    echo
-    echo "── $domain ─────────────────────────────"
+  local stack_file="$DLOG_ROOT/stack/stack;universe"
+  printf ';stack;epoch;%s;ok;\n' "$epoch" > "$stack_file"
+  _log "[beat] wrote stack snapshot → $stack_file"
 
-    # DNS A
-    echo "[dns] A:"
-    if command -v dig >/dev/null 2>&1; then
-      dig +short "$domain" || true
-    else
-      echo "  (dig not installed)"
-    fi
-    echo
+  local inf_master="$DLOG_ROOT/∞/;∞;∞;∞;∞;∞;∞;∞;∞;∞;"
+  : > "$inf_master"
+  _log "[beat] wrote 9∞ master root → $inf_master"
 
-    # DNS AAAA
-    echo "[dns] AAAA:"
-    if command -v dig >/dev/null 2>&1; then
-      dig AAAA +short "$domain" || true
-    else
-      echo "  (dig not installed)"
-    fi
-    echo
+  local dash_file="$DLOG_ROOT/dashboard/dashboard;status"
+  cat > "$dash_file" <<EOF
+;dashboard;epoch;$epoch;status;ok;
+;project;$PROJECT_ID;region;$RUN_REGION;service;$CLOUD_RUN_SERVICE;
+EOF
+  _log "[beat] wrote Ω-dashboard snapshot → $dash_file"
 
-    # Cloud Run domain-mapping conditions
-    echo "[run] domain-mapping conditions:"
-    _domains_print_conditions "$domain"
+  # Optional: apply Kubernetes manifests if present
+  if _have kubectl && [ -d "$DLOG_ROOT/kube/universe" ]; then
+    _log "[beat] applying universe manifests → $DLOG_ROOT/kube/universe (namespace dlog-universe)"
+    kubectl apply -n dlog-universe -f "$DLOG_ROOT/kube/universe" || true
+  fi
+
+  # Soft ping that dlog.command can hook into if it wants
+  if [ -x "$DLOG_ROOT/dlog.command" ]; then
+    _log "[beat] delegating to dlog.command → beat"
+    "$DLOG_ROOT/dlog.command" beat || true
+  fi
+
+  _log "[beat] complete (stack + dashboard + 9∞)."
+}
+
+_refold_flames() {
+  # Usage:
+  #   refold.command flames          → default 8888
+  #   refold.command flames 7777     → set directly
+  #   refold.command flames hz 8888  → explicit hz keyword
+  local hz="8888"
+
+  if [[ "${1:-}" == "hz" ]]; then
+    hz="${2:-8888}"
+  elif [[ -n "${1:-}" ]]; then
+    hz="$1"
+  fi
+
+  mkdir -p "$DLOG_ROOT/flames"
+  local control="$DLOG_ROOT/flames/flames;control"
+
+  cat > "$control" <<EOF
+hz=$hz
+height=7
+friction=leidenfrost
+EOF
+
+  echo "[refold] wrote flames control → $control"
+  echo "Flames control: hz=$hz height=7 friction=leidenfrost"
+  echo "(refold.command itself does not start audio — your Ω-engine must read $control)"
+}
+
+_refold_sky_play() {
+  # lightweight vibes-only logger; Ctrl+C to stop
+  local stream="$DLOG_ROOT/sky/sky;stream"
+  mkdir -p "$(dirname "$stream")"
+
+  _log "[Ω-sky] Streaming state to: $stream"
+  echo "omega_hz=7777 episodes=8 curve=cosine loop=true" > "$stream"
+  _log "[Ω-sky] episodes=8 ω_hz=7777 curve=cosine loop=true"
+  echo "[Ω-sky] crossfade 1→2 ✦ phase 0.000 / 1.000"
+
+  local from=1
+  local to=2
+  local phase
+
+  while true; do
+    phase=0.0
+    while (( $(echo "$phase < 1.001" | bc -l) )); do
+      printf '[Ω-sky] crossfade %d→%d ✦ phase %.3f / 1.000\n' "$from" "$to" "$phase"
+      phase=$(echo "$phase + 0.016" | bc -l)
+      sleep 0.016 2>/dev/null || sleep 0.02
+    done
+    from=$to
+    to=$(( (to % 8) + 1 ))
   done
 }
 
-cmd_domains_map() {
-  echo "=== 🌐 refold.command domains map ==="
-  gcloud config set project "$PROJECT_ID" >/dev/null
-  gcloud config set run/platform "$RUN_PLATFORM" >/dev/null
-  gcloud config set run/region "$RUN_REGION" >/dev/null
+# ---------- Cloud Run deploy ----------------------------------------
 
-  for domain in "${DOMAINS[@]}"; do
+_refold_deploy() {
+  _ensure_gcloud_context
+
+  cat <<EOF
+=== 🚀 refold.command deploy (Cloud Run) ===
+[deploy] project:  $PROJECT_ID
+[deploy] region:   $RUN_REGION
+[deploy] service:  $CLOUD_RUN_SERVICE
+[deploy] root:     $DLOG_ROOT
+EOF
+
+  ( cd "$DLOG_ROOT"
+    gcloud run deploy "$CLOUD_RUN_SERVICE" \
+      --source . \
+      --region "$RUN_REGION" \
+      --platform "$RUN_PLATFORM" \
+      --allow-unauthenticated
+  )
+
+  echo "[deploy] ✅ Cloud Run deploy complete."
+  echo "[deploy] tip: ~/Desktop/refold.command domains status"
+}
+
+# ---------- Domains: status / map -----------------------------------
+
+_refold_domains_status() {
+  _ensure_gcloud_context
+  echo "=== 🌐 DLOG DOMAINS – status (DNS + certs) ==="
+
+  local domain
+  for domain in "${DLOG_DOMAINS[@]}"; do
     echo
     echo "── $domain ─────────────────────────────"
-    # Try describe first; if exists, skip
+
+    echo "[dns] A:"
+    if _have dig; then
+      dig +short "$domain" A || true
+    else
+      echo "  (dig not installed)"
+    fi
+    echo
+
+    echo "[dns] AAAA:"
+    if _have dig; then
+      dig +short "$domain" AAAA || true
+    else
+      echo "  (dig not installed)"
+    fi
+    echo
+
+    echo "[run] domain-mapping conditions:"
     if gcloud beta run domain-mappings describe --domain "$domain" \
-          >/dev/null 2>&1; then
+         --format='table(status.conditions[].type,status.conditions[].status,status.conditions[].message)' \
+         2>/dev/null; then
+      :
+    else
+      echo "  (no domain-mapping found for $domain in $RUN_REGION)"
+    fi
+  done
+}
+
+_refold_domains_map() {
+  _ensure_gcloud_context
+  echo "=== 🌐 refold.command domains map ==="
+  echo
+
+  local domain
+  for domain in "${DLOG_DOMAINS[@]}"; do
+    echo "── $domain ─────────────────────────────"
+    # try describe first
+    if gcloud beta run domain-mappings describe --domain "$domain" \
+         --region "$RUN_REGION" >/dev/null 2>&1; then
       echo "[refold] domain-mapping already exists for $domain"
+      echo
       continue
     fi
 
     echo "[refold] creating domain-mapping for $domain → service $CLOUD_RUN_SERVICE…"
     if gcloud beta run domain-mappings create \
-          --service "$CLOUD_RUN_SERVICE" \
-          --domain "$domain" \
-          --region "$RUN_REGION"; then
-      echo "[refold] ✓ created domain-mapping for $domain"
+         --service "$CLOUD_RUN_SERVICE" \
+         --domain "$domain" \
+         --region "$RUN_REGION"; then
+      echo "[refold] ✅ created domain-mapping for $domain"
     else
       echo "[refold] ⚠️ could not create domain-mapping for $domain"
       echo "        - this usually means the domain is not yet verified for project $PROJECT_ID"
-      echo "        - or another project has already claimed it"
+      echo "        - or another project/account has already claimed it"
     fi
+    echo
   done
 }
 
-cmd_domains() {
-  local sub="${1:-status}"
-  shift || true
+# ---------- Shields: Cloud Armor + ingress lock ---------------------
 
-  case "$sub" in
-    status)
-      cmd_domains_status "$@"
-      ;;
-    map)
-      cmd_domains_map "$@"
-      ;;
-    *)
-      echo "Usage: $0 domains {status|map}"
-      return 1
-      ;;
-  esac
-}
+_refold_shields() {
+  _ensure_gcloud_context
 
-# ------------------ DEPLOY (Cloud Run) -----------------------
-
-cmd_deploy() {
-  echo "=== 🚀 refold.command deploy (Cloud Run) ==="
-
-  local project="$PROJECT_ID"
-  local region="$RUN_REGION"
-  local service="$CLOUD_RUN_SERVICE"
-  local root="$DLOG_ROOT"
-
-  echo "[deploy] project:  $project"
-  echo "[deploy] region:   $region"
-  echo "[deploy] service:  $service"
-  echo "[deploy] root:     $root"
-
-  cd "$root" || {
-    echo "[deploy] ❌ cannot cd into $root"
-    return 1
-  }
-
-  gcloud config set project "$project"
-  gcloud config set run/platform "$RUN_PLATFORM"
-  gcloud config set run/region "$region"
-
-  echo "[deploy] building container (Dockerfile) and pushing to Cloud Run…"
-
-  if ! gcloud run deploy "$service" \
-          --source . \
-          --region "$region" \
-          --platform "$RUN_PLATFORM" \
-          --allow-unauthenticated; then
-    local rc=$?
-    echo "[deploy] ❌ gcloud run deploy failed (exit $rc)"
-    return "$rc"
-  fi
-
-  echo "[deploy] ✅ Cloud Run deploy complete."
-  echo "[deploy] tip: $0 domains status"
-}
-
-# ------------------ SHIELDS (Cloud Armor hook) ---------------
-
-cmd_shields() {
-  echo "=== 🛡️ refold.command shields (Cloud Armor + ingress hook) ==="
-
-  gcloud config set project "$PROJECT_ID" >/dev/null
-  gcloud config set compute/region "$RUN_REGION" >/dev/null
-  gcloud config set run/region "$RUN_REGION" >/dev/null
-
-  local policy_name="dlog-gold-armor"
   local backend="${BACKEND_SERVICE:-}"
+  if [[ -z "$backend" ]]; then
+    cat <<EOF
+[armor] ⚠️ BACKEND_SERVICE is not set.
 
-  # 1) security policy
-  echo "[armor] ensuring security policy $policy_name exists…"
-  if ! gcloud compute security-policies describe "$policy_name" \
-        --global >/dev/null 2>&1; then
-    gcloud compute security-policies create "$policy_name" \
-      --description="Ω-shield for dlog.gold / goldengold.gold / nedlog.gold" \
-      --global || true
+Export your HTTPS LB backend name first, e.g.:
+
+  export BACKEND_SERVICE="dlog-gold-backend"
+  ~/Desktop/refold.command shields
+
+You can inspect existing backends with:
+  gcloud compute backend-services list --global
+EOF
+    exit 1
   fi
 
-  # 2) allow-all rule as a soft default
-  echo "[armor] ensuring allow-all rule 1000 exists (soft default)…"
-  if ! gcloud compute security-policies rules describe 1000 \
-        --security-policy "$policy_name" \
-        --global >/dev/null 2>&1; then
-    gcloud compute security-policies rules create 1000 \
-      --security-policy "$policy_name" \
-      --global \
-      --description="soft allow-all (to be hardened later)" \
-      --action=allow \
-      --src-ip-ranges="*"
+  local policy="dlog-gold-armor"
+
+  if gcloud compute security-policies describe "$policy" >/dev/null 2>&1; then
+    echo "[armor] security policy $policy already exists…"
   else
-    gcloud compute security-policies rules update 1000 \
-      --security-policy "$policy_name" \
-      --global \
-      --description="soft allow-all (to be hardened later)" \
-      --action=allow \
-      --src-ip-ranges="*"
+    echo "[armor] creating security policy $policy…"
+    gcloud compute security-policies create "$policy" \
+      --description="DLOG.gold shield – layer 7 filter (Ω-physics)"
   fi
 
-  if [ -z "$backend" ]; then
-    echo "[armor] BACKEND_SERVICE not set – not attaching policy."
-    echo "[armor]   export BACKEND_SERVICE=\"your-backend-name\"  # e.g. dlog-gold-backend"
-    echo "[armor]   then run: $0 shields"
-    return 0
+  # Soft allow-all rule 1000 (we can tighten later)
+  if gcloud compute security-policies rules list \
+        --security-policy="$policy" \
+        --format='value(priority)' | grep -q '^1000$'; then
+    echo "[armor] rule 1000 already present (soft default)…"
+  else
+    echo "[armor] creating rule 1000 (soft allow-all)…"
+    gcloud compute security-policies rules create 1000 \
+      --security-policy="$policy" \
+      --expression="true" \
+      --action=allow
   fi
 
-  echo "[armor] attaching $policy_name to backend-service $backend…"
-  if ! gcloud compute backend-services update "$backend" \
-        --security-policy "$policy_name" \
+  echo "[armor] attaching policy to backend-service $backend…"
+  if gcloud compute backend-services update "$backend" \
+        --security-policy="$policy" \
         --global; then
-    echo "[armor] ⚠️ could not attach policy to backend-service '$backend'"
-    echo "[armor]   check: gcloud compute backend-services list --global"
-    return 1
+    echo "[armor] ✅ security policy attached to $backend."
+  else
+    echo "[armor] ⚠️ failed to attach policy."
+    echo "      - check that backend-service '$backend' exists:"
+    echo "        gcloud compute backend-services list --global"
   fi
 
-  echo "[armor] ✅ shields raised for backend-service $backend"
+  echo "[armor] tightening Cloud Run ingress (internal-and-cloud-load-balancing)…"
+  if gcloud run services update "$CLOUD_RUN_SERVICE" \
+        --ingress internal-and-cloud-load-balancing \
+        --region "$RUN_REGION" \
+        --platform="$RUN_PLATFORM"; then
+    echo "[armor] ✅ Cloud Run ingress locked to LB only."
+  else
+    echo "[armor] ⚠️ could not update Cloud Run ingress – adjust manually if needed."
+  fi
+
+  echo "[armor] shields sequence complete."
 }
 
-# ------------------ HELP / DISPATCH --------------------------
+# ---------- dispatcher ----------------------------------------------
 
-cmd_help() {
-  cat << EOF
-Usage: $0 <command> [args...]
+_refold_help() {
+  cat <<EOF
+Usage: refold.command <subcommand> [args...]
 
-Core Ω commands:
-  ping                       Show current Ω/dlog environment
-  beat                       Update stack, 9∞ root, dashboard, sky manifests
-  flames [hz N]              Write flames;control (default 8888 Hz)
-  sky play                   Fake Ω-sky crossfade log to sky;stream
-  sky tail                   Tail the sky;stream file
-  speakers                   Run omega_speakers via cargo
-
-Domains:
-  domains status             Show DNS + Cloud Run domain-mapping status
-  domains map                Ensure domain-mappings exist for:
-                             dlog.gold, goldengold.gold, nedlog.gold
+Ω-core:
+  ping                    Show detected paths + project context
+  beat                    Refresh stack/dashboard/9∞ and poke universe
+  flames [hz N]           Write flames control (default 8888)
+  sky play                Run Ω-sky crossfade log (Ctrl+C to stop)
 
 Cloud:
-  deploy                     Deploy \$CLOUD_RUN_SERVICE from \$DLOG_ROOT to Cloud Run
-  shields                    Ensure Cloud Armor policy + (optionally) attach to backend
+  deploy                  Build + deploy dlog-gold-app to Cloud Run
 
-Environment variables you can set:
-  DLOG_ROOT                  Root of dlog workspace (default: ~/Desktop/dlog)
-  PROJECT_ID                 GCP project id (default: dlog-gold)
-  RUN_REGION                 Cloud Run region (default: us-central1)
-  CLOUD_RUN_SERVICE          Cloud Run service name (default: dlog-gold-app)
-  BACKEND_SERVICE            HTTPS LB backend-service for shields command
-  OMEGA_RAIL_HZ              Timing rail frequency for speakers (default: 8888)
-  OMEGA_WHOOSH_MIN_HZ        Min whoosh frequency (default: 333)
-  OMEGA_WHOOSH_MAX_HZ        Max whoosh frequency (default: 999)
+Domains:
+  domains status          Show DNS A/AAAA + domain-mapping conditions
+  domains map             Ensure domain-mappings exist (if verified)
+
+Shields:
+  shields                 Attach Cloud Armor + tighten Cloud Run ingress
+                          Requires BACKEND_SERVICE env var:
+                            export BACKEND_SERVICE="dlog-gold-backend"
+                            ~/Desktop/refold.command shields
 EOF
 }
 
 main() {
   local cmd="${1:-help}"
-  if [ "$#" -gt 0 ]; then shift || true; fi
+  shift || true
 
   case "$cmd" in
-    ping)       cmd_ping "$@" ;;
-    beat)       cmd_beat "$@" ;;
-    flames)     cmd_flames "$@" ;;
-    sky)        cmd_sky "$@" ;;
-    speakers)   cmd_speakers "$@" ;;
-
-    domains)    cmd_domains "$@" ;;
-    deploy)     cmd_deploy "$@" ;;
-    shields)    cmd_shields "$@" ;;
-
-    help|-h|--help)
-                cmd_help ;;
+    ping)         _refold_ping "$@" ;;
+    beat)         _refold_beat "$@" ;;
+    flames)       _refold_flames "$@" ;;
+    sky)
+      case "${1:-}" in
+        play) shift || true; _refold_sky_play "$@" ;;
+        *) _refold_help ;;
+      esac
+      ;;
+    deploy)       _refold_deploy "$@" ;;
+    domains)
+      case "${1:-}" in
+        status) shift || true; _refold_domains_status "$@" ;;
+        map)    shift || true; _refold_domains_map "$@" ;;
+        *)      _refold_help ;;
+      esac
+      ;;
+    shields)      _refold_shields "$@" ;;
+    help|-h|--help|"") _refold_help ;;
     *)
-      echo "Unknown command: $cmd"
+      echo "Unknown subcommand: $cmd"
       echo
-      cmd_help
-      return 1
+      _refold_help
+      exit 1
       ;;
   esac
 }
