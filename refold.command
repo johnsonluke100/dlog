@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # ============================================================
 # refold.command — Ω-physics + Cloud Run + domains + shields
+# with 8-second self-healing security resets
 # ============================================================
-# Entry points (from anywhere, usually in ~/Desktop/dlog):
+# Entry points (run from anywhere, usually in ~/Desktop/dlog):
 #
 #   ~/Desktop/refold.command ping
 #   ~/Desktop/refold.command beat
@@ -14,9 +15,9 @@
 #   ~/Desktop/refold.command domains map
 #
 #   BACKEND_SERVICE="dlog-gold-backend" ~/Desktop/refold.command shields
+#   BACKEND_SERVICE="dlog-gold-backend" ~/Desktop/refold.command shields watch
 #
-# No limits. Just flow.
-# ------------------------------------------------------------
+# ============================================================
 
 set -euo pipefail
 
@@ -35,13 +36,12 @@ CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-dlog-gold-app}"
 
 export DLOG_ROOT OMEGA_ROOT PROJECT_ID RUN_REGION RUN_PLATFORM CLOUD_RUN_SERVICE
 
-# Domains that belong to this Ω-universe
+# Domains in this Ω-universe
 DLOG_DOMAINS=("dlog.gold" "goldengold.gold" "nedlog.gold")
 
 # ---------- helpers --------------------------------------------------
 
 _log() {
-  # timestamped message
   local now
   now="$(date '+%Y-%m-%d %H:%M:%S')"
   printf '[%s] %s\n' "$now" "$*"
@@ -52,9 +52,9 @@ _have() {
 }
 
 _ensure_gcloud_context() {
-  gcloud config set core/project "$PROJECT_ID" >/dev/null 2>&1 || true
-  gcloud config set run/platform "$RUN_PLATFORM" >/dev/null 2>&1 || true
-  gcloud config set run/region "$RUN_REGION" >/dev/null 2>&1 || true
+  gcloud config set core/project    "$PROJECT_ID" >/dev/null 2>&1 || true
+  gcloud config set run/platform    "$RUN_PLATFORM" >/dev/null 2>&1 || true
+  gcloud config set run/region      "$RUN_REGION" >/dev/null 2>&1 || true
 }
 
 # ---------- Ω: ping / beat / flames / sky ----------------------------
@@ -62,16 +62,16 @@ _ensure_gcloud_context() {
 _refold_ping() {
   cat <<EOF
 === refold.command ping ===
-Desktop:      $HOME/Desktop
-DLOG_ROOT:    $DLOG_ROOT
-OMEGA_ROOT:   $OMEGA_ROOT
-STACK_ROOT:   $DLOG_ROOT/stack
-UNIVERSE_NS:  dlog-universe
-KUBE_MANIFEST:$DLOG_ROOT/kube
-Ω-INF-ROOT:   $DLOG_ROOT/∞
-PROJECT_ID:   $PROJECT_ID
-RUN_REGION:   $RUN_REGION
-RUN_PLATFORM: $RUN_PLATFORM
+Desktop:         $HOME/Desktop
+DLOG_ROOT:       $DLOG_ROOT
+OMEGA_ROOT:      $OMEGA_ROOT
+STACK_ROOT:      $DLOG_ROOT/stack
+UNIVERSE_NS:     dlog-universe
+KUBE_MANIFEST:   $DLOG_ROOT/kube
+Ω-INF-ROOT:      $DLOG_ROOT/∞
+PROJECT_ID:      $PROJECT_ID
+RUN_REGION:      $RUN_REGION
+RUN_PLATFORM:    $RUN_PLATFORM
 CLOUD_RUN_SERVICE: $CLOUD_RUN_SERVICE
 EOF
 }
@@ -98,13 +98,11 @@ _refold_beat() {
 EOF
   _log "[beat] wrote Ω-dashboard snapshot → $dash_file"
 
-  # Optional: apply Kubernetes manifests if present
   if _have kubectl && [ -d "$DLOG_ROOT/kube/universe" ]; then
     _log "[beat] applying universe manifests → $DLOG_ROOT/kube/universe (namespace dlog-universe)"
     kubectl apply -n dlog-universe -f "$DLOG_ROOT/kube/universe" || true
   fi
 
-  # Soft ping that dlog.command can hook into if it wants
   if [ -x "$DLOG_ROOT/dlog.command" ]; then
     _log "[beat] delegating to dlog.command → beat"
     "$DLOG_ROOT/dlog.command" beat || true
@@ -117,7 +115,7 @@ _refold_flames() {
   # Usage:
   #   refold.command flames          → default 8888
   #   refold.command flames 7777     → set directly
-  #   refold.command flames hz 8888  → explicit hz keyword
+  #   refold.command flames hz 8888  → explicit keyword
   local hz="8888"
 
   if [[ "${1:-}" == "hz" ]]; then
@@ -141,7 +139,6 @@ EOF
 }
 
 _refold_sky_play() {
-  # lightweight vibes-only logger; Ctrl+C to stop
   local stream="$DLOG_ROOT/sky/sky;stream"
   mkdir -p "$(dirname "$stream")"
 
@@ -179,7 +176,8 @@ _refold_deploy() {
 [deploy] root:     $DLOG_ROOT
 EOF
 
-  ( cd "$DLOG_ROOT"
+  (
+    cd "$DLOG_ROOT"
     gcloud run deploy "$CLOUD_RUN_SERVICE" \
       --source . \
       --region "$RUN_REGION" \
@@ -220,9 +218,12 @@ _refold_domains_status() {
 
     echo "[run] domain-mapping conditions:"
     if gcloud beta run domain-mappings describe --domain "$domain" \
+         --region "$RUN_REGION" \
          --format='table(status.conditions[].type,status.conditions[].status,status.conditions[].message)' \
-         2>/dev/null; then
-      :
+         >/dev/null 2>&1; then
+      gcloud beta run domain-mappings describe --domain "$domain" \
+        --region "$RUN_REGION" \
+        --format='table(status.conditions[].type,status.conditions[].status,status.conditions[].message)'
     else
       echo "  (no domain-mapping found for $domain in $RUN_REGION)"
     fi
@@ -237,7 +238,6 @@ _refold_domains_map() {
   local domain
   for domain in "${DLOG_DOMAINS[@]}"; do
     echo "── $domain ─────────────────────────────"
-    # try describe first
     if gcloud beta run domain-mappings describe --domain "$domain" \
          --region "$RUN_REGION" >/dev/null 2>&1; then
       echo "[refold] domain-mapping already exists for $domain"
@@ -261,8 +261,9 @@ _refold_domains_map() {
 }
 
 # ---------- Shields: Cloud Armor + ingress lock ---------------------
+# 8-second reset loop lives here.
 
-_refold_shields() {
+_refold_shields_once() {
   _ensure_gcloud_context
 
   local backend="${BACKEND_SERVICE:-}"
@@ -278,54 +279,99 @@ Export your HTTPS LB backend name first, e.g.:
 You can inspect existing backends with:
   gcloud compute backend-services list --global
 EOF
-    exit 1
+    return 1
   fi
 
   local policy="dlog-gold-armor"
 
+  # We deliberately do *not* let a single failure kill the loop.
+  set +e
+
   if gcloud compute security-policies describe "$policy" >/dev/null 2>&1; then
-    echo "[armor] security policy $policy already exists…"
+    _log "[armor] security policy $policy already exists."
   else
-    echo "[armor] creating security policy $policy…"
+    _log "[armor] creating security policy $policy…"
     gcloud compute security-policies create "$policy" \
       --description="DLOG.gold shield – layer 7 filter (Ω-physics)"
   fi
 
-  # Soft allow-all rule 1000 (we can tighten later)
+  # Soft allow-all rule 1000 (to be tuned later)
   if gcloud compute security-policies rules list \
         --security-policy="$policy" \
         --format='value(priority)' | grep -q '^1000$'; then
-    echo "[armor] rule 1000 already present (soft default)…"
+    _log "[armor] rule 1000 already present (soft allow-all)."
   else
-    echo "[armor] creating rule 1000 (soft allow-all)…"
+    _log "[armor] creating rule 1000 (soft allow-all)…"
     gcloud compute security-policies rules create 1000 \
       --security-policy="$policy" \
       --expression="true" \
       --action=allow
   fi
 
-  echo "[armor] attaching policy to backend-service $backend…"
-  if gcloud compute backend-services update "$backend" \
-        --security-policy="$policy" \
-        --global; then
-    echo "[armor] ✅ security policy attached to $backend."
-  else
-    echo "[armor] ⚠️ failed to attach policy."
-    echo "      - check that backend-service '$backend' exists:"
-    echo "        gcloud compute backend-services list --global"
-  fi
+  _log "[armor] attaching policy $policy to backend-service $backend…"
+  gcloud compute backend-services update "$backend" \
+    --security-policy="$policy" \
+    --global
 
-  echo "[armor] tightening Cloud Run ingress (internal-and-cloud-load-balancing)…"
-  if gcloud run services update "$CLOUD_RUN_SERVICE" \
-        --ingress internal-and-cloud-load-balancing \
-        --region "$RUN_REGION" \
-        --platform="$RUN_PLATFORM"; then
-    echo "[armor] ✅ Cloud Run ingress locked to LB only."
-  else
-    echo "[armor] ⚠️ could not update Cloud Run ingress – adjust manually if needed."
-  fi
+  _log "[armor] tightening Cloud Run ingress (internal-and-cloud-load-balancing)…"
+  gcloud run services update "$CLOUD_RUN_SERVICE" \
+    --ingress internal-and-cloud-load-balancing \
+    --region "$RUN_REGION" \
+    --platform="$RUN_PLATFORM"
 
-  echo "[armor] shields sequence complete."
+  # Optional: show a tiny status snapshot for vibes
+  _log "[armor] snapshot:"
+  gcloud compute backend-services describe "$backend" \
+    --global \
+    --format='value(securityPolicy)' 2>/dev/null | sed 's/^/[armor]   /' || true
+
+  set -e
+}
+
+_refold_shields() {
+  local mode="${1:-once}"
+
+  case "$mode" in
+    once)
+      echo "=== 🛡️ refold.command shields (single pass) ==="
+      _refold_shields_once
+      echo "[armor] shields pass complete."
+      ;;
+    watch)
+      echo "=== 🛡️ refold.command shields watch (8s reset loop) ==="
+      echo "[armor] BACKEND_SERVICE=${BACKEND_SERVICE:-<unset>}"
+      echo "[armor] CLOUD_RUN_SERVICE=$CLOUD_RUN_SERVICE"
+      echo "[armor] project=$PROJECT_ID region=$RUN_REGION"
+      echo
+      echo "[armor] Every 8 seconds:"
+      echo "        - ensure security policy exists"
+      echo "        - ensure rule 1000 exists"
+      echo "        - reattach policy to backend"
+      echo "        - re-lock Cloud Run ingress"
+      echo
+      echo "(Ctrl+C any time to stop — universe keeps your last config.)"
+      echo
+
+      local cycle=0
+      while true; do
+        cycle=$((cycle + 1))
+        _log "[armor] === cycle $cycle (8s reset) ==="
+        if ! _refold_shields_once; then
+          _log "[armor] cycle $cycle had errors (check logs above)."
+        else
+          _log "[armor] cycle $cycle ok."
+        fi
+        sleep 8
+      done
+      ;;
+    *)
+      echo "[armor] Unknown shields mode: $mode"
+      echo "Usage:"
+      echo "  BACKEND_SERVICE=\"dlog-gold-backend\" ~/Desktop/refold.command shields"
+      echo "  BACKEND_SERVICE=\"dlog-gold-backend\" ~/Desktop/refold.command shields watch"
+      return 1
+      ;;
+  esac
 }
 
 # ---------- dispatcher ----------------------------------------------
@@ -347,11 +393,15 @@ Domains:
   domains status          Show DNS A/AAAA + domain-mapping conditions
   domains map             Ensure domain-mappings exist (if verified)
 
-Shields:
-  shields                 Attach Cloud Armor + tighten Cloud Run ingress
-                          Requires BACKEND_SERVICE env var:
-                            export BACKEND_SERVICE="dlog-gold-backend"
-                            ~/Desktop/refold.command shields
+Shields (Cloud Armor + ingress):
+  shields                 Single shields pass (no loop)
+  shields once            Same as 'shields'
+  shields watch           8-second reset loop
+
+All shields commands require BACKEND_SERVICE, e.g.:
+
+  export BACKEND_SERVICE="dlog-gold-backend"
+  ~/Desktop/refold.command shields watch
 EOF
 }
 
@@ -377,7 +427,10 @@ main() {
         *)      _refold_help ;;
       esac
       ;;
-    shields)      _refold_shields "$@" ;;
+    shields)
+      # shields [once|watch]
+      _refold_shields "${1:-once}"
+      ;;
     help|-h|--help|"") _refold_help ;;
     *)
       echo "Unknown subcommand: $cmd"
