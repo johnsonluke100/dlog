@@ -1,4 +1,2 @@
-epoch=1764483315
-root=9∞
-project=dlog-gold
-region=us-central1
+;9∞;epoch;1764484047;root;ok;
+;cpu=heart;gpu=brain;omega=8888;four;flames;rise;
