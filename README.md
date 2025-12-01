@@ -25,3 +25,16 @@ Launcher:
   - Exports `OMEGA_ROOT`
   - Starts `dlog-omega` in the background (endless tuning fork)
   - Runs `dlog-api` in the foreground
+
+## Deployment (HTTP/3)
+
+Cloud Run handles QUIC/TLS termination for `dlog_gold_http`. Use `./cloud.command deploy` or follow `docs/cloud-run.md` for a manual walkthrough targeting project `dlog-gold`, region `us-east1`, and service `api`.
+
+## Omega HTTP-4 Edge
+
+`dlog_gold_http` now exposes the first HTTP-4 JSON bridge:
+
+- `POST /omega/handshake` → registers a session and emits DNS router hints.
+- `POST /omega/frame`     → accepts frame envelopes and returns routing acks.
+
+All traffic flows over HTTP/3 (QUIC) at the Cloud Run edge, then feeds the Rust-only Ω kernel behind the scenes.

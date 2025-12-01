@@ -3,8 +3,8 @@ set -euo pipefail
 
 PROJECT="dlog-gold"
 DOMAIN="dlog.gold"
-SERVICE="dlog-gold-app"
-REGION="us-central1"
+SERVICE="api"
+REGION="us-east1"
 
 banner() {
   printf '\n=== 🌟 DLOG.GOLD CLOUD (%s) 🌟 ===\n\n' "$1"
@@ -36,7 +36,8 @@ case "${1-}" in
       --source . \
       --region="${REGION}" \
       --platform=managed \
-      --allow-unauthenticated
+      --allow-unauthenticated \
+      --port=8080
     ;;
   *)
     cat <<EOF
