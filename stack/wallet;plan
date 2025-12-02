@@ -1,4 +1,4 @@
-;omega_bank;plan;epoch;1764712571;slots;256;passphrase_set;1;
+;omega_bank;plan;epoch;1764712580;slots;256;passphrase_set;1;
 # asset,index,id_hex16,mode
 XAUT,000,bdca4427f551cd0bca15928803817252,secure
 XAUT,001,87fcc0ffabedbc6c9f0f4da1ac1353c9,secure
