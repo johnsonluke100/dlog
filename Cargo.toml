@@ -9,6 +9,7 @@ members = [
     "sky",
     "api",
     "omega_bank",
+    "omega",
 ]
 resolver = "1"
 

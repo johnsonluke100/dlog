@@ -10,6 +10,7 @@ use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
 };
+use tokio::net::TcpListener;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -40,7 +41,8 @@ enum PresenceState {
 #[derive(Clone, Debug, Deserialize)]
 struct MojangPresenceRequest {
     gamer_tag: String,
-    mojang_uuid: String,
+    #[serde(rename = "mojang_uuid")]
+    _mojang_uuid: String,
     phone: String,
     label: String,
     display_name: Option<String>,
@@ -85,10 +87,18 @@ async fn main() {
         .with_state(state);
 
     let addr: SocketAddr = "0.0.0.0:4000".parse().expect("invalid bind address");
-    println!("presence_service listening on http://{addr}");
+    let listener = TcpListener::bind(addr)
+        .await
+        .expect("failed to bind address");
+    println!(
+        "presence_service listening on http://{}",
+        listener
+            .local_addr()
+            .map(|a| a.to_string())
+            .unwrap_or_else(|_| addr.to_string())
+    );
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+    axum::serve(listener, app)
         .await
         .expect("server error");
 }

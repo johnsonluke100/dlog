@@ -15,6 +15,7 @@ struct HandshakeRequest {
     session_token: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct HandshakeResponse {
     session_id: String,
@@ -24,6 +25,7 @@ struct HandshakeResponse {
     identity: Option<IdentityDescriptor>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct PhoneStartResponse {
     session_token: String,
@@ -32,12 +34,14 @@ struct PhoneStartResponse {
     instructions: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct PhoneConfirmResponse {
     status: String,
     verified: bool,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct RouteHint {
     omega_path: String,
@@ -45,6 +49,7 @@ struct RouteHint {
     confidence: f32,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct IdentityDescriptor {
     phone: String,
@@ -62,6 +67,7 @@ struct FrameEnvelope {
     payload: serde_json::Value,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct FrameAck {
     session_id: String,
@@ -92,6 +98,7 @@ struct ClientIdentity {
     session_token: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 struct WebPresencePayload {
     phone: String,

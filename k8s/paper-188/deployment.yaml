@@ -28,6 +28,8 @@ spec:
           ports:
             - containerPort: 25565
               name: mc
+            - containerPort: 8123
+              name: dynmap
           resources:
             requests:
               cpu: "500m"

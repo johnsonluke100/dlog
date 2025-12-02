@@ -187,6 +187,7 @@ pub enum BridgeInstruction {
     },
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct SessionInfo {
     client_id: String,
@@ -631,6 +632,7 @@ impl DnsRouter {
 #[derive(Debug)]
 struct InfinityBank {
     ledger: Mutex<HashMap<String, u128>>,
+    #[allow(dead_code)]
     interest_apy_bps: u32,
     last_tick_ms: Mutex<i64>,
     per_tick_factor_ppm: u64,

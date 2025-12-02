@@ -49,6 +49,8 @@ impl Default for MonetarySpec {
 
 /// Golden ratio, used as Ω scaling constant.
 pub const PHI: f64 = 1.618_033_988_749_894;
+/// Default φ tick rate in Hz (Omega Leidenfrost heartbeat).
+pub const PHI_TICK_HZ: f64 = 8_888.0;
 
 #[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct PlanetGravityProfile {

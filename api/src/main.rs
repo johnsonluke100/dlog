@@ -68,6 +68,7 @@ struct TickRequest {
     entities: Vec<EntityState>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct EntityState {
     armor_stand_id: String,

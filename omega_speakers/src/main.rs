@@ -74,12 +74,13 @@ impl OmegaConfig {
         }
 
         let alpha_scale = friction_alpha(&friction);
+        let sky_stream_path = format!("{}/sky/sky;stream", omega_root);
 
         Self {
             omega_root,
             control_path,
             speaker_path,
-            sky_stream_path: format!("{}/sky/sky;stream", omega_root),
+            sky_stream_path,
             rail_hz,
             whoosh_min_hz,
             whoosh_max_hz,
@@ -131,13 +132,13 @@ fn speaker_profile_path(omega_root: &str, friction: &str) -> String {
 
 fn derive_whoosh_band(mode: &str, height: f32) -> (f32, f32) {
     let clamped_h = height.clamp(0.0, 12.0);
-    let (min, span) = match mode.to_ascii_lowercase().as_str() {
+    let (min, span): (f32, f32) = match mode.to_ascii_lowercase().as_str() {
         "whoosh_rail" => (180.0 + clamped_h * 48.0, 420.0),
         "hum" => (90.0 + clamped_h * 22.0, 240.0),
         "ring" => (360.0 + clamped_h * 32.0, 520.0),
         _ => (240.0 + clamped_h * 36.0, 360.0),
     };
-    (min, min + span.max(120.0))
+    (min, min + span.max(120.0_f32))
 }
 
 fn friction_alpha(friction: &str) -> f32 {
@@ -251,7 +252,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let source = OmegaSource {
         sample_rate: 44_100,
-        rail_hz,
+        rail_hz: config.rail_hz,
         whoosh_min_hz: config.whoosh_min_hz,
         whoosh_max_hz: config.whoosh_max_hz,
         gain: config.gain,

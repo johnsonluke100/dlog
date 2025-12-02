@@ -1,4 +1,5 @@
 FROM eclipse-temurin:8u412-b08-jdk-focal AS runtime
+ARG DYNMAP_VERSION=3.7-beta-7
 
 # Create a non-root user and home dir
 RUN useradd -m -u 10001 paper && mkdir -p /home/paper/server && chown -R paper:paper /home/paper
@@ -13,8 +14,13 @@ COPY godmode/spigot.yml ./spigot.yml
 COPY godmode/paper.yml ./paper.yml
 COPY godmode/forwarding.secret ./forwarding.secret
 
+# Optional web map (Dynmap) so the server is reachable from a browser
+RUN mkdir -p plugins
+ADD https://dynmap.us/builds/dynmap/Dynmap-${DYNMAP_VERSION}-spigot.jar ./plugins/dynmap.jar
+
 # Default ports
 EXPOSE 25565/tcp
+EXPOSE 8123/tcp
 
 # EULA acceptance must be provided via env EULA=TRUE (or you can bake in eula.txt if desired)
 ENV EULA=TRUE

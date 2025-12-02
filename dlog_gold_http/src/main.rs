@@ -35,6 +35,7 @@ struct AppState {
     phone_auth: Arc<PhoneAuth>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 struct RootResponse<'a> {
     status: &'a str,
@@ -45,6 +46,7 @@ struct RootResponse<'a> {
     commands: Vec<&'a str>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 struct GoldenWalletStack<'a> {
     title: &'a str,
@@ -53,6 +55,7 @@ struct GoldenWalletStack<'a> {
     decree: &'a str,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 struct Layer<'a> {
     name: &'a str,
@@ -60,6 +63,7 @@ struct Layer<'a> {
     highlights: Vec<&'a str>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 struct CanonLinks<'a> {
     repo: &'a str,
@@ -590,11 +594,13 @@ async fn register_presence(
     Ok(())
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize)]
 struct PresenceLookupResponse {
     record: Option<PresenceRecordPayload>,
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize)]
 struct PresenceRecordPayload {
     phone: String,
@@ -603,6 +609,7 @@ struct PresenceRecordPayload {
     state: PresenceStatePayload,
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 enum PresenceStatePayload {
@@ -611,6 +618,7 @@ enum PresenceStatePayload {
     Offline,
 }
 
+#[allow(dead_code)]
 async fn lookup_presence(state: &AppState, phone: &str) -> Option<IdentityDescriptor> {
     let url = format!("{}/presence/{}", state.presence_base, phone);
     let resp = state.presence.get(url).send().await.ok()?;

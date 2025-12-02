@@ -29,6 +29,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 #   4) Keep server.properties either with server-ip blank or 0.0.0.0 and
 #      server-port matching the SRV (25565 by default).
 #   5) Open TCP on that port in firewall / router (and port-forward if home).
+#   Dynmap web map (browser): expose TCP 8123 and browse http://dlog.gold:8123/
 # ---------------------------------------------------------------------------
 
 # ------------------------------ Logging -------------------------------------
@@ -934,7 +935,7 @@ EOF
 main() {
   local cmd="${1-}"; shift || true
   case "$cmd" in
-    ""|-h|--help) usage ;;
+    ""|help|-h|--help) usage ;;
     ping)         cmd_ping ;;
     beat)         cmd_beat ;;
     wand)         cmd_wand ;;
@@ -949,6 +950,7 @@ main() {
     shields)      cmd_shields "$@" ;;
     flow)         cmd_flow ;;
     wallet)       cmd_wallet "$@" ;;
+    bank)         cmd_bank "$@" ;;
     vault)
       local sub="${1-verify}"; shift || true
       case "$sub" in
@@ -988,14 +990,6 @@ main() {
       usage
       exit 1
       ;;
-<<<<<<< HEAD
-=======
-    flow)          cmd_flow "$@" ;;
-    ""|help|-h|--help) usage ;;
-    *)             usage; exit 1 ;;
-    bank)    cmd_bank "$@" ;;
-
->>>>>>> bb798d733a6ca31725a631a706bd5808a4233b19
   esac
 }
 
