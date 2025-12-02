@@ -682,6 +682,255 @@ Subcommands:
 EOF
 }
 
+# === Ω-BANK (SHA-512 || BLAKE3 "sha-1024" wallet stack) =====================
+
+omega_bank_root() {
+  # default to your DLOG root
+  if [ -n "${DLOG_ROOT:-}" ]; then
+    printf '%s\n' "$DLOG_ROOT/omega_bank"
+  else
+    printf '%s\n' "$HOME/Desktop/dlog/omega_bank"
+  fi
+}
+
+omega_bank_init() {
+  local ROOT="${DLOG_ROOT:-$HOME/Desktop/dlog}"
+  local CRATE_DIR
+  CRATE_DIR="$(omega_bank_root)"
+
+  echo "=== 🏦 Ω-BANK INIT ==="
+  echo "[bank] ROOT:      $ROOT"
+  echo "[bank] CRATE_DIR: $CRATE_DIR"
+
+  mkdir -p "$ROOT"
+
+  if [ ! -d "$CRATE_DIR" ]; then
+    echo "[bank] creating omega_bank crate (standalone, not in workspace)…"
+    ( cd "$ROOT" && cargo new omega_bank --bin >/dev/null 2>&1 )
+  else
+    echo "[bank] omega_bank crate already exists, refreshing sources…"
+  fi
+
+  # Minimal Cargo.toml – SHA-512 + BLAKE3 + hex
+  cat > "$CRATE_DIR/Cargo.toml" << 'EOF'
+[package]
+name = "omega_bank"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sha2 = "0.10"
+blake3 = "1"
+hex = "0.4"
+EOF
+
+  # Main Rust file: SHA-512 || BLAKE3 "ΩHASH1024" + 3 × 256 wallet IDs
+  cat > "$CRATE_DIR/src/main.rs" << 'EOF'
+use sha2::{Sha512, Digest};
+use std::env;
+
+/// 1024-bit hash: SHA-512(m) || BLAKE3-512(m)
+fn omega_hash1024(input: &[u8]) -> [u8; 128] {
+    // SHA-512 half
+    let mut sha = Sha512::new();
+    sha.update(input);
+    let sha_out = sha.finalize(); // 64 bytes
+
+    // BLAKE3-512 half (XOF mode)
+    let mut blake_out = [0u8; 64];
+    blake3::Hasher::new()
+        .update(input)
+        .finalize_xof()
+        .fill(&mut blake_out);
+
+    // Concatenate
+    let mut out = [0u8; 128];
+    out[0..64].copy_from_slice(&sha_out);
+    out[64..128].copy_from_slice(&blake_out);
+    out
+}
+
+/// Very simple KDF for now:
+///   root_key = SHA-512("ΩBANK" || passphrase)[0..32]
+/// For real money, upgrade this to Argon2id.
+fn derive_root_key(passphrase: &str) -> [u8; 32] {
+    let mut sha = Sha512::new();
+    sha.update(b"\xEEOmegaBankRoot");
+    sha.update(passphrase.as_bytes());
+    let out = sha.finalize();
+    let mut root = [0u8; 32];
+    root.copy_from_slice(&out[0..32]);
+    root
+}
+
+fn derive_asset_master(root_key: &[u8; 32], asset_code: u8) -> ([u8; 32], [u8; 32]) {
+    // asset_tag = "ΩASSET" || asset_code
+    let mut tag = Vec::new();
+    tag.extend_from_slice(b"\xEEOmegaAsset");
+    tag.push(asset_code);
+
+    // seed = SHA-512(root_key || tag)
+    let mut sha = Sha512::new();
+    sha.update(root_key);
+    sha.update(&tag);
+    let seed = sha.finalize(); // 64 bytes
+
+    // 1024-bit expansion
+    let hash1024 = omega_hash1024(&seed);
+
+    let mut priv_master = [0u8; 32];
+    let mut id_master   = [0u8; 32];
+
+    priv_master.copy_from_slice(&hash1024[0..32]);
+    id_master.copy_from_slice(&hash1024[32..64]);
+
+    (priv_master, id_master)
+}
+
+/// Derive a single wallet (public ID only) for a given asset + index
+fn derive_wallet_id(
+    asset_priv_master: &[u8; 32],
+    asset_code: u8,
+    index: u32,
+) -> [u8; 32] {
+    let mut path_tag = Vec::new();
+    path_tag.extend_from_slice(b"\xEEWalletPath");
+    path_tag.push(asset_code);
+    path_tag.extend_from_slice(&index.to_be_bytes());
+
+    // child_seed = SHA-512(asset_priv_master || path_tag)
+    let mut sha = Sha512::new();
+    sha.update(asset_priv_master);
+    sha.update(&path_tag);
+    let child_seed = sha.finalize();
+
+    // child_hash = ΩHASH1024(child_seed)
+    let child_hash = omega_hash1024(&child_seed);
+
+    // child_id = bytes 32..64 (no private scalar output here)
+    let mut id = [0u8; 32];
+    id.copy_from_slice(&child_hash[32..64]);
+    id
+}
+
+fn hex32(b: &[u8; 32]) -> String {
+    hex::encode(b)
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    if args.len() <= 1 {
+        eprintln!("Usage: omega-bank plan");
+        eprintln!("  env OMEGA_BANK_PASSPHRASE must be set.");
+        std::process::exit(1);
+    }
+
+    let cmd = &args[1];
+
+    let pass = match env::var("OMEGA_BANK_PASSPHRASE") {
+        Ok(v) => v,
+        Err(_) => {
+            eprintln!("OMEGA_BANK_PASSPHRASE not set.");
+            std::process::exit(1);
+        }
+    };
+
+    let root_key = derive_root_key(&pass);
+
+    // Asset codes: 1 = XAUT, 2 = BTC, 3 = DOGE
+    let assets = [
+        (1u8, "XAUT"),
+        (2u8, "BTC"),
+        (3u8, "DOGE"),
+    ];
+
+    match cmd.as_str() {
+        "plan" => {
+            println!("=== 🏦 Ω-BANK PLAN (view-only IDs) ===");
+            println!("(derived from OMEGA_BANK_PASSPHRASE via SHA-512 || BLAKE3)");
+            println!();
+
+            for (code, name) in &assets {
+                let (priv_master, id_master) = derive_asset_master(&root_key, *code);
+                println!("--- ASSET {name} (code={code}) ---");
+                println!("master_id   = {}", hex32(&id_master));
+                println!("(master_priv hidden; NEVER printed)");
+                println!();
+
+                for i in 0u32..256 {
+                    let id = derive_wallet_id(&priv_master, *code, i);
+                    println!("{name} idx={:03} id={}", i, hex32(&id));
+                }
+
+                println!();
+            }
+        }
+        other => {
+            eprintln!("Unknown command: {other}");
+            eprintln!("Usage: omega-bank plan");
+            std::process::exit(1);
+        }
+    }
+}
+EOF
+
+  echo "[bank] omega_bank sources written."
+  echo "[bank] building release binary…"
+  ( cd "$CRATE_DIR" && cargo build --release ) || {
+    echo "[bank] ❌ build failed"; return 1;
+  }
+  echo "[bank] ✅ omega_bank ready."
+}
+
+omega_bank_plan() {
+  local CRATE_DIR
+  CRATE_DIR="$(omega_bank_root)"
+
+  if [ ! -x "$CRATE_DIR/target/release/omega_bank" ]; then
+    echo "[bank] omega_bank binary missing, running init…"
+    omega_bank_init || return 1
+  fi
+
+  if [ -z "${OMEGA_BANK_PASSPHRASE:-}" ]; then
+    echo "[bank] ❌ OMEGA_BANK_PASSPHRASE is not set."
+    echo "[bank]    export OMEGA_BANK_PASSPHRASE='your-strong-passphrase'"
+    return 1
+  fi
+
+  echo "=== 🏦 Ω-BANK PLAN via omega_bank (SHA-512 || BLAKE3) ==="
+  ( cd "$CRATE_DIR" && OMEGA_BANK_PASSPHRASE="$OMEGA_BANK_PASSPHRASE" ./target/release/omega_bank plan )
+}
+
+cmd_bank() {
+  local sub="${1:-help}"
+  shift || true
+  case "$sub" in
+    init)
+      omega_bank_init "$@"
+      ;;
+    plan)
+      omega_bank_plan "$@"
+      ;;
+    *)
+      cat << 'EOF'
+Usage: refold.command bank <subcommand>
+
+  bank init   - create/update ω-bank Rust crate (SHA-512 || BLAKE3)
+  bank plan   - print XAUT/BTC/DOGE × 256 wallet IDs (no priv keys)
+
+Examples:
+
+  export OMEGA_BANK_PASSPHRASE='use-a-strong-secret'
+  ~/Desktop/refold.command bank init
+  ~/Desktop/refold.command bank plan
+EOF
+      ;;
+  esac
+}
+# === end Ω-BANK section ======================================================
+
+
+
 main() {
   local cmd="${1-}"; shift || true
   case "$cmd" in
@@ -739,6 +988,14 @@ main() {
       usage
       exit 1
       ;;
+<<<<<<< HEAD
+=======
+    flow)          cmd_flow "$@" ;;
+    ""|help|-h|--help) usage ;;
+    *)             usage; exit 1 ;;
+    bank)    cmd_bank "$@" ;;
+
+>>>>>>> bb798d733a6ca31725a631a706bd5808a4233b19
   esac
 }
 
