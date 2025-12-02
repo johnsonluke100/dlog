@@ -1,6 +1,6 @@
 //! SkyLighting logic for the Ω universe.
 
-use dlog_spec::{SkyShowConfig, SkySlideRef};
+use spec::{SkyShowConfig, SkySlideRef};
 
 /// Runtime representation of a looping sky timeline.
 #[derive(Debug, Clone)]
@@ -25,6 +25,10 @@ impl SkyTimeline {
 
     pub fn default_eight() -> Self {
         Self::new(SkyShowConfig::default_eight())
+    }
+
+    pub fn show(&self) -> &SkyShowConfig {
+        &self.show
     }
 
     pub fn slide_at_tick(&self, tick: u64) -> Option<&SkySlideRef> {

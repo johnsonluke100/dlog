@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: paper-188
+  labels:
+    app: paper-188
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: paper-188
+  template:
+    metadata:
+      labels:
+        app: paper-188
+    spec:
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: paper
+          image: gcr.io/dlog-gold/paper-188:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: EULA
+              value: "TRUE"
+          ports:
+            - containerPort: 25565
+              name: mc
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+          readinessProbe:
+            tcpSocket:
+              port: mc
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: mc
+            initialDelaySeconds: 30
+            periodSeconds: 30

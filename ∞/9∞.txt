@@ -1,2 +1,1 @@
-;9∞;epoch;1764484047;root;ok;
-;cpu=heart;gpu=brain;omega=8888;four;flames;rise;
+9∞ root anchored at 2025-12-02 15:55:19

@@ -1,0 +1,9 @@
+name: OmegaBridge
+main: com.dlog.bridge.OmegaBridgePlugin
+version: 0.1.0
+api-version: 1.13
+description: Bridge that mirrors players to armor stands and talks to a Rust sidecar.
+author: dlog
+load: POSTWORLD
+commands: {}
+permissions: {}

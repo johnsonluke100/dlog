@@ -6,9 +6,12 @@
 //! - Apply φ-based holder interest over N blocks
 //! - Render block height as base-8 text for UI/logs
 
+mod shaless;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use shaless::master_root_for;
 use spec::{LabelId, MonetarySpec};
 
 /// Snapshot of balances at a given block height.
@@ -16,8 +19,8 @@ use spec::{LabelId, MonetarySpec};
 pub struct UniverseSnapshot {
     /// Height of the chain / attention sweep.
     pub height: u64,
-    /// Scalar representation of the 9∞ master root for this block.
-    pub master_root_scalar: String,
+    /// sha-less Infinity-base representation of the 9∞ master root.
+    pub master_root_infinity: String,
     /// Balances per (phone,label) universe.
     pub balances: HashMap<LabelId, f64>,
 }
@@ -25,11 +28,13 @@ pub struct UniverseSnapshot {
 impl UniverseSnapshot {
     /// Start from an empty universe.
     pub fn empty() -> Self {
-        Self {
+        let mut snapshot = Self {
             height: 0,
-            master_root_scalar: String::new(),
             balances: HashMap::new(),
-        }
+            master_root_infinity: String::new(),
+        };
+        snapshot.refresh_master_root();
+        snapshot
     }
 
     /// Apply φ-based holder interest over `blocks_elapsed` blocks.
@@ -54,6 +59,11 @@ impl UniverseSnapshot {
         }
 
         self.height = self.height.saturating_add(blocks_elapsed);
+        self.refresh_master_root();
+    }
+
+    fn refresh_master_root(&mut self) {
+        self.master_root_infinity = master_root_for(self.height, &self.balances);
     }
 }
 

@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: velocity-proxy
+  labels:
+    app: velocity-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: velocity-proxy
+  template:
+    metadata:
+      labels:
+        app: velocity-proxy
+    spec:
+      containers:
+        - name: velocity
+          image: gcr.io/dlog-gold/velocity-proxy:latest
+          imagePullPolicy: Always
+          ports:
+            - name: java-tcp
+              containerPort: 25565
+              protocol: TCP
+            - name: bedrock-udp
+              containerPort: 19132
+              protocol: UDP
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"

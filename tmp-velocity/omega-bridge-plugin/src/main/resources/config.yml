@@ -1,0 +1,4 @@
+endpoint-url: "http://127.0.0.1:7070/tick"
+auth-token: "change-me"
+tick-interval-ticks: 10
+set-spectator: false

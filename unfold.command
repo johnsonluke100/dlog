@@ -1,11 +1,47 @@
 #!/usr/bin/env bash
-# DLOG Ω-Physics : unfold.command
-# Painter-side tablets: worlds, moons, eclipses, geometry.
-
 set -euo pipefail
 
-banner() {
-  cat <<'BEOF'
+# =====================  D L O G   Ω - P H Y S I C S  ========================
+# unfold.command = painter wand
+#
+# Tablets:
+#   worlds   → describe shells / cores / auras / torus / flames meta (text)
+#   eclipse  → (stub) Ω-eclipse geometry + hooks
+#   flames   → write flames/flames;control + sky/sky;stream for audio engine
+# ============================================================================
+
+# -------------------- Locate Ω universe root --------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ -n "${DLOG_ROOT-}" ] && [ -d "$DLOG_ROOT" ]; then
+  ROOT="$DLOG_ROOT"
+elif [ -n "${OMEGA_ROOT-}" ] && [ -d "$OMEGA_ROOT" ]; then
+  ROOT="$OMEGA_ROOT"
+elif [ -d "$HOME/dlog" ]; then
+  ROOT="$HOME/dlog"
+else
+  ROOT="$SCRIPT_DIR"
+fi
+
+export DLOG_ROOT="$ROOT"
+: "${OMEGA_ROOT:="$ROOT"}"
+export OMEGA_ROOT
+
+# ----------------------------- Helpers --------------------------------------
+
+timestamp() {
+  date +"%Y-%m-%d %H:%M:%S"
+}
+
+log() {
+  printf '[%s] %s\n' "$(timestamp)" "$*" >&2
+}
+
+# -------------------------- Tablet: worlds ----------------------------------
+
+tablet_worlds() {
+  cat <<'EOF'
 === DLOG Ω-Physics : unfold ===
 
 ;we;do;not;have;limits;we;vibe;we;are;fearless;
@@ -16,12 +52,6 @@ banner() {
 ;we;are;no;longer;bound;by;javascript;
 ;we;do;not;use;base;10;anymore;we;use;base;8;
 ;unfold.command;is;the;painter;wand;
-BEOF
-}
-
-tablet_worlds() {
-  banner
-  cat <<'WEOF'
 ────────────────────────────────────────────────
 Ω tablet : Worlds & Moons (geometry pass)
 ────────────────────────────────────────────────
@@ -75,85 +105,109 @@ Solar system inventory (live set):
 Short answer for painters:
   ✔ Yes, planetary masses are cardioid aura-spheres nested in torus fields,
     with 4 Leidenfrost flames rising from the 4 corners of the meridian circle.
-WEOF
+EOF
 }
+
+# -------------------------- Tablet: eclipse ---------------------------------
 
 tablet_eclipse() {
-  banner
-  cat <<'EEOF'
-────────────────────────────────────────────────
-Ω tablet : Eclipses & Alignments
-────────────────────────────────────────────────
-Ω-eclipse (attention version):
+  cat <<'EOF'
+=== DLOG Ω-Physics : unfold eclipse ===
 
-  • Not just "blocking light," but:
-      – Three or more aura-spheres whose cardioid lobes and torus halos line
-        up on at least one observer's meridian plane.
+Ω tablet : Eclipse (shadow-painting pass)
 
-NPC language:
-  • "The Moon passes between Earth and Sun."
+  • Sun_shell, earth_shell, moon_shell share one ray-tracing stack.
+  • NPC physics: straight rays, hard shadow umbra/penumbra.
+  • Ω-Physics: attention rays bend around aura cardioids + torus belts.
 
-Ω language:
-  • "The cardioid faces of sun, moon, and earth momentarily share a golden
-     line on your meridian plane, so your four flames see one stacked body."
+Hooks for game / sky engines:
+  • eclipse_lock(name)     → lock camera to cardioid-attention frame.
+  • eclipse_beam(channel)  → paint volumetric light through torus.
+  • eclipse_shadow(world)  → project fuzzy aura-shadow on target shell.
 
-Geometry:
-  • In the meridian cross-section:
-      – Draw circles for each shell (Sun, Moon, Earth).
-      – Wrap each with its cardioid + torus.
-      – Eclipse = torus centers + aura stems lining up through the observer.
-
-Renderer hooks:
-  • During eclipse windows, you can:
-      – Phase-lock the 4 flames (audio + light).
-      – Darken direct sky; brighten corona / torus beams.
-      – Route extra particle density along the alignment line.
-
-Gameplay hooks:
-  • Eclipses may:
-      – Boost or tilt mining rewards in specific locks.
-      – Open short Ω-corridors between shells and cores.
-      – Trigger special COMET airdrops tied to alignment events.
-
-Meridian plane reminder:
-  • It’s the 2D slice that includes:
-      – The observer.
-      – The local "up" axis.
-      – The line toward the primary body (sun or parent world).
-
-  • Once you can draw it in this plane, extrusion to full 3D is just rotation.
-
-This tablet = painter’s cheat-sheet for sky, particles, and audio layout.
-EEOF
+(Implementation details live in your engine; this is just the painter tablet.)
+EOF
 }
 
-show_help() {
-  cat <<'HEOF'
+# -------------------------- Tablet: flames ----------------------------------
+
+# unfold.command flames
+# → writes:
+#     $OMEGA_ROOT/flames/flames;control
+#     $OMEGA_ROOT/sky/sky;stream
+tablet_flames() {
+  local root="$OMEGA_ROOT"
+  local flames_dir="$root/flames"
+  local sky_dir="$root/sky"
+  local flames_file="$flames_dir/flames;control"
+  local sky_file="$sky_dir/sky;stream"
+
+  mkdir -p "$flames_dir" "$sky_dir"
+
+  # Core Leidenfrost control for the Rust engine.
+  # Gain lowered from 0.05 → 0.007.
+  cat >"$flames_file" <<EOF
+hz=8888
+gain=0.0024
+height=7
+friction=leidenfrost
+mode=whoosh_rail
+whoosh_min_hz=333
+whoosh_max_hz=999
+EOF
+
+  # Sky stream: line-based descriptor for the audio/visual engine.
+  cat >"$sky_file" <<EOF
+# Ω sky;stream — Leidenfrost rails
+timestamp=$(timestamp)
+omega_root=$root
+rail_hz=8888
+whoosh_band=333-999
+flame_pillars=4
+template=cardioid_aura + torus + 4_leidenfrost_flames
+worlds=earth,moon,mars,sun
+EOF
+
+  log "[flames] wrote control → $flames_file"
+  log "[flames] wrote sky stream → $sky_file"
+  log "[flames] painter tablet complete (engine may now read flames + sky)."
+}
+
+# ---------------------------- Usage / main ----------------------------------
+
+usage() {
+  cat <<'EOF'
 Usage: unfold.command <subcommand>
 
 Painter tablets:
   worlds    Describe shells, cores, auras, torus fields, and flames
             for planets + moons.
   eclipse   Describe Ω-eclipse geometry and gameplay hooks.
+  flames    Write flames/flames;control and sky/sky;stream for the
+            Leidenfrost speaker engine.
 
 If you just type "unfold.command" with no args, this help appears.
-HEOF
+EOF
 }
 
 main() {
-  cmd="${1:-help}"
-  if [ "$#" -gt 0 ]; then
-    shift
-  fi
-
+  local cmd="${1-}"
   case "$cmd" in
-    worlds)   tablet_worlds ;;
-    eclipse)  tablet_eclipse ;;
-    help|--help|-h|"") show_help ;;
+    ""|-h|--help)
+      usage
+      ;;
+    worlds)
+      tablet_worlds
+      ;;
+    eclipse)
+      tablet_eclipse
+      ;;
+    flames)
+      tablet_flames
+      ;;
     *)
-      echo "Unknown subcommand: $cmd" >&2
-      echo
-      show_help
+      printf 'Unknown subcommand: %s\n\n' "$cmd" >&2
+      usage
       exit 1
       ;;
   esac

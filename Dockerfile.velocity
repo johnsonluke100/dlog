@@ -1,0 +1,19 @@
+FROM eclipse-temurin:17-jdk-focal
+
+RUN useradd -m -u 10002 velocity && mkdir -p /home/velocity/server && chown -R velocity:velocity /home/velocity
+USER velocity
+WORKDIR /home/velocity/server
+
+# Copy Velocity binary and configs
+COPY vortex/velocity.jar ./velocity.jar
+COPY vortex/velocity.toml ./velocity.toml
+COPY vortex/forwarding.secret ./forwarding.secret
+COPY vortex/plugins ./plugins
+COPY vortex/lang ./lang
+COPY vortex/omega-bridge-plugin ./omega-bridge-plugin
+
+# Expose Java + optional Bedrock ports
+EXPOSE 25565/tcp
+EXPOSE 19132/udp
+
+ENTRYPOINT ["java","-Xms512M","-Xmx2G","-jar","velocity.jar"]

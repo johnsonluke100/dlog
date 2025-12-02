@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: paper-188-5
+  labels:
+    app: paper-188
+spec:
+  type: LoadBalancer
+  selector:
+    app: paper-188
+  ports:
+    - name: mc
+      port: 25565
+      targetPort: 25565
+      protocol: TCP

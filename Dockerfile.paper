@@ -1,0 +1,23 @@
+FROM eclipse-temurin:8u412-b08-jdk-focal AS runtime
+
+# Create a non-root user and home dir
+RUN useradd -m -u 10001 paper && mkdir -p /home/paper/server && chown -R paper:paper /home/paper
+
+WORKDIR /home/paper/server
+USER paper
+
+# Copy server files
+COPY godmode/paper.jar ./paper.jar
+COPY godmode/server.properties ./server.properties
+COPY godmode/spigot.yml ./spigot.yml
+COPY godmode/paper.yml ./paper.yml
+COPY godmode/forwarding.secret ./forwarding.secret
+
+# Default ports
+EXPOSE 25565/tcp
+
+# EULA acceptance must be provided via env EULA=TRUE (or you can bake in eula.txt if desired)
+ENV EULA=TRUE
+
+# Prevent interactive prompts; run Paper
+ENTRYPOINT ["java","-Xms1G","-Xmx2G","-jar","paper.jar","--nogui"]

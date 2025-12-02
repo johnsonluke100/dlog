@@ -1,7 +1,6 @@
 // Ω: identifier for which planet/realm this monetary binding is attached.
 pub type PlanetId = String;
 
-
 //
 // === Ω auto: LabelId + MonetarySpec (do not edit by hand) ===================
 //
@@ -41,7 +40,6 @@ impl Default for MonetarySpec {
 }
 
 // === Ω auto end: LabelId + MonetarySpec =====================================
-
 
 //
 // Ω-Physics planetary gravity profile + φ constant.
@@ -92,3 +90,32 @@ pub const PLANET_PROFILES: &[PlanetGravityProfile] = &[
         core_radius_m: 1_800_000.0,
     },
 ];
+
+//
+// Sky (slideshow) spec — minimal for API exposure
+//
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct SkySlideRef {
+    pub id: String,
+    pub duration_ticks: u64,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct SkyShowConfig {
+    pub slides: Vec<SkySlideRef>,
+}
+
+impl SkyShowConfig {
+    pub fn default_eight() -> Self {
+        // Eight slides, each 888 ticks by default.
+        let mut slides = Vec::with_capacity(8);
+        for i in 0..8 {
+            slides.push(SkySlideRef {
+                id: format!("slide-{}", i + 1),
+                duration_ticks: 888,
+            });
+        }
+        SkyShowConfig { slides }
+    }
+}

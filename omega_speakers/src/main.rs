@@ -1,10 +1,154 @@
+use std::collections::HashMap;
 use std::env;
 use std::f32::consts::PI;
+use std::fs;
 use std::time::Duration;
 
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use rodio::{OutputStream, Sink, Source};
+
+#[derive(Debug, Clone)]
+struct OmegaConfig {
+    omega_root: String,
+    control_path: String,
+    speaker_path: String,
+    sky_stream_path: String,
+    rail_hz: f32,
+    whoosh_min_hz: f32,
+    whoosh_max_hz: f32,
+    gain: f32,
+    friction: String,
+    mode: String,
+    height: f32,
+    alpha_scale: f32,
+}
+
+impl OmegaConfig {
+    fn load() -> Self {
+        let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        let omega_root = env::var("OMEGA_ROOT").unwrap_or_else(|_| format!("{home}/Desktop/dlog"));
+
+        let control_path = format!("{omega_root}/flames/flames;control");
+        let control = parse_kv_file(&control_path);
+
+        let friction = control
+            .get("friction")
+            .map(|s| s.trim().to_lowercase())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "air".to_string());
+
+        let speaker_path = speaker_profile_path(&omega_root, &friction);
+        let speaker = parse_kv_file(&speaker_path);
+
+        let height = speaker
+            .get("height")
+            .or_else(|| control.get("height"))
+            .and_then(|s| s.parse::<f32>().ok())
+            .unwrap_or(5.0);
+
+        let mode = env::var("OMEGA_SPEAKER_MODE")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| speaker.get("mode").cloned())
+            .unwrap_or_else(|| "whoosh_rail".into());
+
+        let rail_hz = env_f32("OMEGA_RAIL_HZ")
+            .or_else(|| speaker.get("hz").and_then(|s| s.parse::<f32>().ok()))
+            .or_else(|| control.get("hz").and_then(|s| s.parse::<f32>().ok()))
+            .unwrap_or(8888.0);
+
+        let gain = env_f32("OMEGA_GAIN")
+            .or_else(|| speaker.get("gain").and_then(|s| s.parse::<f32>().ok()))
+            .unwrap_or(0.05);
+
+        let (derived_min, derived_max) = derive_whoosh_band(&mode, height);
+        let whoosh_min_hz = env_f32("OMEGA_WHOOSH_MIN_HZ")
+            .or_else(|| speaker.get("min_hz").and_then(|s| s.parse::<f32>().ok()))
+            .unwrap_or(derived_min);
+        let mut whoosh_max_hz = env_f32("OMEGA_WHOOSH_MAX_HZ")
+            .or_else(|| speaker.get("max_hz").and_then(|s| s.parse::<f32>().ok()))
+            .unwrap_or(derived_max);
+        if whoosh_max_hz <= whoosh_min_hz {
+            whoosh_max_hz = whoosh_min_hz + 64.0;
+        }
+
+        let alpha_scale = friction_alpha(&friction);
+
+        Self {
+            omega_root,
+            control_path,
+            speaker_path,
+            sky_stream_path: format!("{}/sky/sky;stream", omega_root),
+            rail_hz,
+            whoosh_min_hz,
+            whoosh_max_hz,
+            gain,
+            friction,
+            mode,
+            height,
+            alpha_scale,
+        }
+    }
+}
+
+fn env_f32(key: &str) -> Option<f32> {
+    env::var(key).ok().and_then(|s| s.parse::<f32>().ok())
+}
+
+fn parse_kv_file(path: &str) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    let Ok(contents) = fs::read_to_string(path) else {
+        return out;
+    };
+
+    for line in contents.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some((k, v)) = line.split_once('=') {
+            out.insert(k.trim().to_lowercase(), v.trim().to_string());
+        }
+    }
+
+    out
+}
+
+fn speaker_profile_path(omega_root: &str, friction: &str) -> String {
+    let specific = format!("{omega_root}/flames/speaker;{friction}");
+    if fs::metadata(&specific).is_ok() {
+        return specific;
+    }
+
+    let leidenfrost = format!("{omega_root}/flames/speaker;leidenfrost");
+    if fs::metadata(&leidenfrost).is_ok() {
+        return leidenfrost;
+    }
+
+    format!("{omega_root}/flames/speaker;default")
+}
+
+fn derive_whoosh_band(mode: &str, height: f32) -> (f32, f32) {
+    let clamped_h = height.clamp(0.0, 12.0);
+    let (min, span) = match mode.to_ascii_lowercase().as_str() {
+        "whoosh_rail" => (180.0 + clamped_h * 48.0, 420.0),
+        "hum" => (90.0 + clamped_h * 22.0, 240.0),
+        "ring" => (360.0 + clamped_h * 32.0, 520.0),
+        _ => (240.0 + clamped_h * 36.0, 360.0),
+    };
+    (min, min + span.max(120.0))
+}
+
+fn friction_alpha(friction: &str) -> f32 {
+    match friction {
+        "leidenfrost" => 1.1,
+        "air" => 0.9,
+        "water" => 0.7,
+        "stone" => 0.55,
+        _ => 0.85,
+    }
+}
 
 struct OmegaSource {
     sample_rate: u32,
@@ -12,6 +156,7 @@ struct OmegaSource {
     whoosh_min_hz: f32,
     whoosh_max_hz: f32,
     gain: f32,
+    alpha_scale: f32,
     t: f32,
     rng: StdRng,
     whoosh_state: f32,
@@ -35,7 +180,8 @@ impl Iterator for OmegaSource {
             let center_hz =
                 self.whoosh_min_hz + (self.whoosh_max_hz - self.whoosh_min_hz) * rail_phase;
 
-            let alpha = (2.0 * PI * center_hz * dt).min(0.99);
+            let alpha = ((2.0 * PI * center_hz * dt) * self.alpha_scale)
+                .clamp(0.001, 0.99);
             self.whoosh_state = self.whoosh_state * (1.0 - alpha) + noise * alpha;
         }
 
@@ -67,39 +213,28 @@ impl Source for OmegaSource {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let omega_root = env::var("OMEGA_ROOT").unwrap_or_else(|_| format!("{home}/Desktop/dlog"));
-
-    let control_file = format!("{omega_root}/flames/flames;control");
-    let sky_stream = format!("{omega_root}/sky/sky;stream");
-
-    let rail_hz = env::var("OMEGA_RAIL_HZ")
-        .ok()
-        .and_then(|s| s.parse::<f32>().ok())
-        .unwrap_or(8888.0);
-
-    let whoosh_min_hz = env::var("OMEGA_WHOOSH_MIN_HZ")
-        .ok()
-        .and_then(|s| s.parse::<f32>().ok())
-        .unwrap_or(333.0);
-
-    let whoosh_max_hz = env::var("OMEGA_WHOOSH_MAX_HZ")
-        .ok()
-        .and_then(|s| s.parse::<f32>().ok())
-        .unwrap_or(999.0);
-
-    let gain = env::var("OMEGA_GAIN")
-        .ok()
-        .and_then(|s| s.parse::<f32>().ok())
-        .unwrap_or(0.05);
+    let config = OmegaConfig::load();
 
     println!("=== Ω Rust Speaker Engine (Φ Whoosh Rail) ===");
-    println!("[+] OMEGA_ROOT     : {omega_root}");
-    println!("[+] Control File   : {control_file}");
-    println!("[+] Sky Stream     : {sky_stream}");
-    println!("[+] Rail Hz        : {rail_hz}");
-    println!("[+] Whoosh band    : {whoosh_min_hz}–{whoosh_max_hz} Hz");
-    println!("[+] Gain           : {gain}");
+    println!("[+] OMEGA_ROOT     : {}", config.omega_root);
+    println!(
+        "[+] Control File   : {} (friction={}, height={})",
+        config.control_path, config.friction, config.height
+    );
+    println!(
+        "[+] Speaker Profile: {} (mode={})",
+        config.speaker_path, config.mode
+    );
+    println!("[+] Sky Stream     : {}", config.sky_stream_path);
+    println!("[+] Rail Hz        : {:.3}", config.rail_hz);
+    println!(
+        "[+] Whoosh band    : {:.2}–{:.2} Hz",
+        config.whoosh_min_hz, config.whoosh_max_hz
+    );
+    println!(
+        "[+] Gain           : {:.4} (alpha x{:.2})",
+        config.gain, config.alpha_scale
+    );
 
     // Deterministic 256-bit seed derived from a single 64-bit constant
     let seed_bytes: [u8; 32] = {
@@ -117,9 +252,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let source = OmegaSource {
         sample_rate: 44_100,
         rail_hz,
-        whoosh_min_hz,
-        whoosh_max_hz,
-        gain,
+        whoosh_min_hz: config.whoosh_min_hz,
+        whoosh_max_hz: config.whoosh_max_hz,
+        gain: config.gain,
+        alpha_scale: config.alpha_scale,
         t: 0.0,
         rng,
         whoosh_state: 0.0,

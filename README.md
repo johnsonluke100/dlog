@@ -36,5 +36,20 @@ Cloud Run handles QUIC/TLS termination for `dlog_gold_http`. Use `./cloud.comman
 
 - `POST /omega/handshake` → registers a session and emits DNS router hints.
 - `POST /omega/frame`     → accepts frame envelopes and returns routing acks.
+- `GET /omega/status`     → snapshots the gateway id, boot time, session count, and wired services.
+- `POST /identity/mojang` / `/identity/web` → forward Mojang or DLOGcraft login assertions into the presence service so the HTTP‑4 kernel knows which phone-number / label belongs to each session.
 
-All traffic flows over HTTP/3 (QUIC) at the Cloud Run edge, then feeds the Rust-only Ω kernel behind the scenes.
+All traffic flows over HTTP/3 (QUIC) at the Cloud Run edge, then feeds the Rust-only Ω kernel behind the scenes. The DNS router now performs real lookups against its Ω-path table (with hierarchical fallbacks) so client logs show which subsystem will receive each namespace even before the full services are implemented. The Infinity bank stub responds to `balance_query` and `transfer` frames, mutating an in-memory ledger so client prototypes can exercise real state changes.
+
+### HTTP-4 Client Prototype
+
+- `dlog_http4_client` demonstrates how to speak the bridge: it handshakes, issues a balance query, fires a transfer from COMET → FUN, and then re-queries balances so you can see the ledger mutation notes in the server ack payloads.
+
+### Sha-less Infinity Blocks
+
+- `corelib` now renders `UniverseSnapshot.master_root_infinity` by hashing the height + balances with SHA-512 ‖ BLAKE3 (1024 bits) and expressing the result in Infinity base (octal) with the Ω semicolon framing: `;∞;sha-less;…;`. This replaces the old placeholder scalar so every block height produces a deterministic sha-less root that can be stored under the 9∞ filesystem.
+
+### Presence Service
+
+- `presence_service` (Axum) tracks Mojang and DLOGcraft sessions keyed by phone number. Set `PRESENCE_BASE_URL` (default `http://127.0.0.1:4000`) so `dlog_gold_http` can call it during `/omega/handshake`, ensuring only known phone-number identities receive Ω access.
+Frame acknowledgements currently include stubbed service logs from the DNS router, Infinity bank, mining dispatcher, speaker engine, and game loop so client developers can see how payloads will fan out once full implementations land.

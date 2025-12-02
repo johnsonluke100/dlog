@@ -2,8 +2,8 @@
 set -euo pipefail
 
 PROJECT="dlog-gold"
-DOMAIN="dlog.gold"
-SERVICE="api"
+DOMAINS=("dlog.gold" "goldengold.gold" "nedlog.gold" "locks.gold" "minepool.gold")
+SERVICE="dlog-gold-app"
 REGION="us-east1"
 
 banner() {
@@ -13,18 +13,22 @@ banner() {
 case "${1-}" in
   status)
     banner "STATUS"
-    echo "[dns] dig ${DOMAIN} (A):"
-    dig "${DOMAIN}" +short || echo "(dig A failed)"
+    for domain in "${DOMAINS[@]}"; do
+      echo "--- ${domain} ---"
+      echo "[dns] dig ${domain} (A):"
+      dig "${domain}" +short || echo "(dig A failed)"
 
-    echo
-    echo "[dns] dig ${DOMAIN} (AAAA):"
-    dig AAAA "${DOMAIN}" +short || echo "(dig AAAA failed)"
+      echo
+      echo "[dns] dig ${domain} (AAAA):"
+      dig AAAA "${domain}" +short || echo "(dig AAAA failed)"
 
-    echo
-    echo "[run] domain-mapping:"
-    gcloud beta run domain-mappings describe --domain "${DOMAIN}" \
-      --format="value(status.conditions[].type,status.conditions[].status,status.conditions[].message)" \
-      || echo "(no mapping yet)"
+      echo
+      echo "[run] domain-mapping:"
+      gcloud beta run domain-mappings describe --domain "${domain}" \
+        --format="value(status.conditions[].type,status.conditions[].status,status.conditions[].message)" \
+        || echo "(no mapping yet)"
+      echo
+    done
     ;;
   deploy)
     banner "DEPLOY"
@@ -43,8 +47,8 @@ case "${1-}" in
     cat <<EOF
 Usage: ./cloud.command <status|deploy>
 
-  status  – show DNS + Cloud Run domain-mapping status for ${DOMAIN}
-  deploy  – build & deploy current dir to Cloud Run (${SERVICE})
+  status  – show DNS + Cloud Run domain-mapping status for ${DOMAINS[*]}
+  deploy  – build & deploy current dir to Cloud Run (${SERVICE}, ${REGION})
 EOF
     ;;
 esac
