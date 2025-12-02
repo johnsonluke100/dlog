@@ -52,7 +52,11 @@ enum Command {
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    if let Some(Command::Wand { refold, args: wand_args }) = &args.command {
+    if let Some(Command::Wand {
+        refold,
+        args: wand_args,
+    }) = &args.command
+    {
         return run_wand(refold, wand_args);
     }
 
@@ -100,7 +104,7 @@ fn run_engine(phi_tick_hz: f64, gravity_phi_exponent: f64, tick_limit: Option<u6
         last_tick = Instant::now();
         ticks = ticks.wrapping_add(1);
 
-        if ticks % 8_888 == 0 || last_log.elapsed() >= Duration::from_secs(8) {
+        if ticks.is_multiple_of(8_888) || last_log.elapsed() >= Duration::from_secs(8) {
             println!(
                 "[omega] ticks={} phi_tick_hz≈{:.3} gravity_phi_exponent={}",
                 ticks, phi_tick_hz, gravity_phi_exponent
@@ -130,10 +134,41 @@ fn run_wand(refold: &str, args: &[String]) -> Result<()> {
     cmd.stdout(Stdio::inherit());
     cmd.stderr(Stdio::inherit());
 
-    let status = cmd.status().with_context(|| format!("failed to spawn {}", refold))?;
+    let status = cmd
+        .status()
+        .with_context(|| format!("failed to spawn {}", refold))?;
     if !status.success() {
         bail!("wand exited with status {}", status);
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn run_engine_respects_tick_limit() {
+        let start = Instant::now();
+        run_engine(10_000.0, 2.0, Some(8)).expect("engine should exit cleanly with tick limit");
+        assert!(
+            start.elapsed() < Duration::from_secs(1),
+            "engine returned promptly when tick limit hit"
+        );
+    }
+
+    #[test]
+    fn wand_returns_error_when_refold_missing() {
+        let err = run_wand("/definitely_missing_refold.command", &[])
+            .expect_err("missing refold should error");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("failed to spawn")
+                || msg.contains("No such file")
+                || msg.contains("os error"),
+            "unexpected error message: {msg}"
+        );
+    }
 }

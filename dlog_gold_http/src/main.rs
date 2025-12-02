@@ -160,18 +160,13 @@ struct ButtonEvent {
     state: ButtonStatePayload,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 enum ButtonStatePayload {
     Pressed,
+    #[default]
     Released,
     Held,
-}
-
-impl Default for ButtonStatePayload {
-    fn default() -> Self {
-        ButtonStatePayload::Released
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -182,17 +177,12 @@ struct AxisEvent {
     mode: Option<AxisModePayload>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 enum AxisModePayload {
+    #[default]
     Relative,
     Absolute,
-}
-
-impl Default for AxisModePayload {
-    fn default() -> Self {
-        AxisModePayload::Relative
-    }
 }
 
 #[derive(Debug, Deserialize)]

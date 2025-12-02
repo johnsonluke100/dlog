@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-const PHI_F32: f32 = 1.618_033_988_75_f32;
+const PHI_F32: f32 = 1.618_034_f32;
 const INPUT_VELOCITY_SCALE: f32 = 0.08;
 const INPUT_ASCENT_SCALE: f32 = 0.16;
 const DEFAULT_WORLD_MAX_Y: f32 = 320.0;

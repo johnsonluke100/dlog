@@ -8,14 +8,8 @@ const SLOTS: usize = 256;
 fn main() {
     let passphrase = env::var("OMEGA_BANK_PASSPHRASE").ok();
     let salt = env::var("OMEGA_BANK_SALT").unwrap_or_else(|_| "omega-bank".to_string());
-    let key_material = format!(
-        "{}|{}",
-        passphrase.as_deref().unwrap_or(""),
-        salt.as_str()
-    );
-    let key_bytes: [u8; 32] = blake3::hash(key_material.as_bytes())
-        .as_bytes()
-        .clone();
+    let key_material = format!("{}|{}", passphrase.as_deref().unwrap_or(""), salt.as_str());
+    let key_bytes: [u8; 32] = *blake3::hash(key_material.as_bytes()).as_bytes();
 
     let epoch = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -33,7 +27,11 @@ fn main() {
     for &asset in ASSETS {
         for idx in 0..SLOTS {
             let id = derive_id(asset, idx as u16, &key_bytes);
-            let mode = if passphrase.is_some() { "secure" } else { "stub" };
+            let mode = if passphrase.is_some() {
+                "secure"
+            } else {
+                "stub"
+            };
             println!("{asset},{idx:03},{id},{mode}");
         }
     }
