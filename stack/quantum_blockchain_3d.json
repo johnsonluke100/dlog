@@ -1,0 +1,38 @@
+[
+  {
+    "id": "quantum-1",
+    "positions": [
+      { "x": 0, "y": 0, "z": 100, "prob": 0.5 },
+      { "x": 0, "y": 0, "z": 101, "prob": 0.5 }
+    ],
+    "materials": [
+      { "type": "gold", "prob": 0.5 },
+      { "type": "diamond", "prob": 0.5 }
+    ],
+    "prev": null
+  },
+  {
+    "id": "quantum-2",
+    "positions": [
+      { "x": 1, "y": 0, "z": 100, "prob": 0.5 },
+      { "x": 1, "y": 0, "z": 101, "prob": 0.5 }
+    ],
+    "materials": [
+      { "type": "gold", "prob": 0.5 },
+      { "type": "diamond", "prob": 0.5 }
+    ],
+    "prev": "quantum-1"
+  },
+  {
+    "id": "quantum-3",
+    "positions": [
+      { "x": 2, "y": 0, "z": 100, "prob": 0.5 },
+      { "x": 2, "y": 0, "z": 101, "prob": 0.5 }
+    ],
+    "materials": [
+      { "type": "gold", "prob": 0.5 },
+      { "type": "diamond", "prob": 0.5 }
+    ],
+    "prev": "quantum-2"
+  }
+]

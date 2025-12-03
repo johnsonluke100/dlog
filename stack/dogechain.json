@@ -1,0 +1,8 @@
+[
+  { "id": "doge-1", "position": { "x": 0, "y": 0, "z": 8 }, "material": "gold", "prev": null, "asset": "DOGE" },
+  { "id": "doge-2", "position": { "x": 1, "y": 0, "z": 8 }, "material": "gold", "prev": "doge-1", "asset": "DOGE" },
+  { "id": "doge-3", "position": { "x": 2, "y": 0, "z": 8 }, "material": "gold", "prev": "doge-2", "asset": "DOGE" },
+  { "id": "doge-4", "position": { "x": 3, "y": 0, "z": 8 }, "material": "gold", "prev": "doge-3", "asset": "DOGE" },
+  { "id": "doge-5", "position": { "x": 1, "y": 1, "z": 8 }, "material": "gold", "prev": "doge-4", "asset": "DOGE" },
+  { "id": "doge-6", "position": { "x": 2, "y": 1, "z": 8 }, "material": "gold", "prev": "doge-5", "asset": "DOGE" }
+]

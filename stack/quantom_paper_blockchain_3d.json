@@ -1,0 +1,7 @@
+[
+  { "id": "quantom-paper-1", "position": { "x": 0, "y": 1, "z": 0 }, "material": "quantum-paper", "prev": null },
+  { "id": "quantom-paper-2", "position": { "x": 1, "y": 1, "z": 0 }, "material": "quantum-paper", "prev": "quantom-paper-1" },
+  { "id": "quantom-paper-3", "position": { "x": 2, "y": 1, "z": 0 }, "material": "quantum-paper", "prev": "quantom-paper-2" },
+  { "id": "quantom-paper-4", "position": { "x": 3, "y": 1, "z": 0 }, "material": "quantum-paper", "prev": "quantom-paper-3" },
+  { "id": "quantom-paper-5", "position": { "x": 4, "y": 1, "z": 0 }, "material": "quantum-paper", "prev": "quantom-paper-4" }
+]

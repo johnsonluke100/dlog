@@ -1,0 +1,7 @@
+[
+  { "id": "barrier-1", "position": { "x": 0, "y": 0, "z": 120 }, "material": "barrier", "prev": null },
+  { "id": "barrier-2", "position": { "x": 1, "y": 0, "z": 120 }, "material": "barrier", "prev": "barrier-1" },
+  { "id": "barrier-3", "position": { "x": 2, "y": 0, "z": 120 }, "material": "barrier", "prev": "barrier-2" },
+  { "id": "barrier-4", "position": { "x": 3, "y": 0, "z": 120 }, "material": "barrier", "prev": "barrier-3" },
+  { "id": "barrier-5", "position": { "x": 4, "y": 0, "z": 120 }, "material": "barrier", "prev": "barrier-4" }
+]

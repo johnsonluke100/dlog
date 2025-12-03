@@ -1,0 +1,18 @@
+[
+  { "id": "sun-1", "position": { "x": 0, "y": 0, "z": 70 }, "material": "glowstone", "prev": null },
+  { "id": "sun-2", "position": { "x": 1, "y": 0, "z": 71 }, "material": "glowstone", "prev": "sun-1" },
+  { "id": "sun-3", "position": { "x": 2, "y": 0, "z": 72 }, "material": "glowstone", "prev": "sun-2" },
+  { "id": "sun-4", "position": { "x": 3, "y": 0, "z": 73 }, "material": "glowstone", "prev": "sun-3" },
+  { "id": "sun-5", "position": { "x": 4, "y": 0, "z": 74 }, "material": "glowstone", "prev": "sun-4" },
+  { "id": "sun-6", "position": { "x": 3, "y": 0, "z": 75 }, "material": "glowstone", "prev": "sun-5" },
+  { "id": "sun-7", "position": { "x": 2, "y": 0, "z": 76 }, "material": "glowstone", "prev": "sun-6" },
+  { "id": "sun-8", "position": { "x": 1, "y": 0, "z": 77 }, "material": "glowstone", "prev": "sun-7" },
+  { "id": "sun-9", "position": { "x": 0, "y": 0, "z": 78 }, "material": "glowstone", "prev": "sun-8" },
+  { "id": "sun-10", "position": { "x": -1, "y": 0, "z": 77 }, "material": "glowstone", "prev": "sun-9" },
+  { "id": "sun-11", "position": { "x": -2, "y": 0, "z": 76 }, "material": "glowstone", "prev": "sun-10" },
+  { "id": "sun-12", "position": { "x": -3, "y": 0, "z": 75 }, "material": "glowstone", "prev": "sun-11" },
+  { "id": "sun-13", "position": { "x": -4, "y": 0, "z": 74 }, "material": "glowstone", "prev": "sun-12" },
+  { "id": "sun-14", "position": { "x": -3, "y": 0, "z": 73 }, "material": "glowstone", "prev": "sun-13" },
+  { "id": "sun-15", "position": { "x": -2, "y": 0, "z": 72 }, "material": "glowstone", "prev": "sun-14" },
+  { "id": "sun-16", "position": { "x": -1, "y": 0, "z": 71 }, "material": "glowstone", "prev": "sun-15" }
+]

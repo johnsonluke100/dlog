@@ -1,0 +1,7 @@
+[
+  { "id": "float-1", "position": { "x": 0, "y": 5, "z": 39 }, "material": "glass", "prev": null },
+  { "id": "float-2", "position": { "x": 1, "y": 5, "z": 39 }, "material": "glass", "prev": "float-1" },
+  { "id": "float-3", "position": { "x": 2, "y": 5, "z": 39 }, "material": "glass", "prev": "float-2" },
+  { "id": "float-4", "position": { "x": 3, "y": 5, "z": 39 }, "material": "glass", "prev": "float-3" },
+  { "id": "float-5", "position": { "x": 4, "y": 5, "z": 39 }, "material": "glass", "prev": "float-4" }
+]

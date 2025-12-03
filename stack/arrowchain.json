@@ -1,0 +1,7 @@
+[
+  { "id": "arrow-1", "position": { "x": 0, "y": 0, "z": 24 }, "material": "arrow_block", "prev": null },
+  { "id": "arrow-2", "position": { "x": 1, "y": 0, "z": 24 }, "material": "arrow_block", "prev": "arrow-1" },
+  { "id": "arrow-3", "position": { "x": 2, "y": 0, "z": 24 }, "material": "arrow_block", "prev": "arrow-2" },
+  { "id": "arrow-4", "position": { "x": 3, "y": 0, "z": 24 }, "material": "arrow_block", "prev": "arrow-3" },
+  { "id": "arrow-5", "position": { "x": 4, "y": 0, "z": 24 }, "material": "arrow_block", "prev": "arrow-4" }
+]

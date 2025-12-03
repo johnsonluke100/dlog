@@ -1,0 +1,7 @@
+[
+  { "id": "half-1", "position": { "x": 0, "y": 0, "z": 85 }, "material": "stone", "prev": null },
+  { "id": "half-2", "position": { "x": 1, "y": 0, "z": 85.5 }, "material": "stone", "prev": "half-1" },
+  { "id": "half-3", "position": { "x": 2, "y": 0, "z": 86 }, "material": "stone", "prev": "half-2" },
+  { "id": "half-4", "position": { "x": 3, "y": 0, "z": 86.5 }, "material": "stone", "prev": "half-3" },
+  { "id": "half-5", "position": { "x": 4, "y": 0, "z": 87 }, "material": "stone", "prev": "half-4" }
+]

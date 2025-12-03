@@ -1,0 +1,7 @@
+[
+  { "id": "unbreakable-1", "position": { "x": 0, "y": 0, "z": 44 }, "material": "bedrock", "prev": null },
+  { "id": "unbreakable-2", "position": { "x": 1, "y": 0, "z": 44 }, "material": "bedrock", "prev": "unbreakable-1" },
+  { "id": "unbreakable-3", "position": { "x": 2, "y": 0, "z": 44 }, "material": "bedrock", "prev": "unbreakable-2" },
+  { "id": "unbreakable-4", "position": { "x": 3, "y": 0, "z": 44 }, "material": "bedrock", "prev": "unbreakable-3" },
+  { "id": "unbreakable-5", "position": { "x": 4, "y": 0, "z": 44 }, "material": "bedrock", "prev": "unbreakable-4" }
+]

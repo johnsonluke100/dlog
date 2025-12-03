@@ -1,0 +1,7 @@
+[
+  { "id": "thunder-1", "coords": { "x": 0, "y": 7, "z": 0 }, "power": 1.0, "prev": null },
+  { "id": "thunder-2", "coords": { "x": 1, "y": 7, "z": 0 }, "power": 0.9, "prev": "thunder-1" },
+  { "id": "thunder-3", "coords": { "x": -1, "y": 7, "z": 0 }, "power": 0.9, "prev": "thunder-2" },
+  { "id": "thunder-4", "coords": { "x": 0, "y": 7, "z": 1 }, "power": 0.8, "prev": "thunder-3" },
+  { "id": "thunder-5", "coords": { "x": 0, "y": 7, "z": -1 }, "power": 0.8, "prev": "thunder-4" }
+]

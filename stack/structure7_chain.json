@@ -1,0 +1,9 @@
+[
+  { "id": "struct-1", "position": { "x": 0, "y": 0, "z": 13 }, "material": "stone", "prev": null },
+  { "id": "struct-2", "position": { "x": 1, "y": 0, "z": 13 }, "material": "stone", "prev": "struct-1" },
+  { "id": "struct-3", "position": { "x": 2, "y": 0, "z": 13 }, "material": "stone", "prev": "struct-2" },
+  { "id": "struct-4", "position": { "x": 3, "y": 0, "z": 13 }, "material": "stone", "prev": "struct-3" },
+  { "id": "struct-5", "position": { "x": 1, "y": 1, "z": 13 }, "material": "stone", "prev": "struct-4" },
+  { "id": "struct-6", "position": { "x": 2, "y": 1, "z": 13 }, "material": "stone", "prev": "struct-5" },
+  { "id": "struct-7", "position": { "x": 1, "y": 2, "z": 13 }, "material": "stone", "prev": "struct-6" }
+]

@@ -1,0 +1,8 @@
+[
+  { "id": "swim-1", "position": { "x": 0, "y": 0, "z": 23 }, "material": "water", "prev": null },
+  { "id": "swim-2", "position": { "x": 1, "y": 0, "z": 23 }, "material": "water", "prev": "swim-1" },
+  { "id": "swim-3", "position": { "x": 2, "y": 0, "z": 23 }, "material": "water", "prev": "swim-2" },
+  { "id": "swim-4", "position": { "x": 3, "y": 0, "z": 23 }, "material": "water", "prev": "swim-3" },
+  { "id": "swim-5", "position": { "x": 1, "y": 1, "z": 23 }, "material": "water", "prev": "swim-4" },
+  { "id": "swim-6", "position": { "x": 2, "y": 1, "z": 23 }, "material": "water", "prev": "swim-5" }
+]

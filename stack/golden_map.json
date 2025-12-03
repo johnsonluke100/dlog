@@ -1,0 +1,12 @@
+{
+  "golden_blocks": [
+    { "id": "gold-1", "coords": { "x": 2, "y": 2, "z": 0 } },
+    { "id": "gold-2", "coords": { "x": 2, "y": 2, "z": 1 } },
+    { "id": "gold-3", "coords": { "x": 2, "y": 2, "z": -1 } },
+    { "id": "gold-4", "coords": { "x": 2, "y": 2, "z": 2 } },
+    { "id": "gold-5", "coords": { "x": 2, "y": 2, "z": -2 } },
+    { "id": "gold-6", "coords": { "x": 3, "y": 2, "z": -2 } },
+    { "id": "gold-7", "coords": { "x": 3, "y": 2, "z": -1 } },
+    { "id": "gold-8", "coords": { "x": 3, "y": 2, "z": 0 } }
+  ]
+}

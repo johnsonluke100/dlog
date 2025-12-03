@@ -1,0 +1,7 @@
+[
+  { "id": "flyspeed-1", "position": { "x": 0, "y": 0, "z": 35 }, "material": "feather", "speed": 1.0, "prev": null },
+  { "id": "flyspeed-2", "position": { "x": 1, "y": 0, "z": 35 }, "material": "feather", "speed": 1.1, "prev": "flyspeed-1" },
+  { "id": "flyspeed-3", "position": { "x": 2, "y": 0, "z": 35 }, "material": "feather", "speed": 1.2, "prev": "flyspeed-2" },
+  { "id": "flyspeed-4", "position": { "x": 3, "y": 0, "z": 35 }, "material": "feather", "speed": 1.3, "prev": "flyspeed-3" },
+  { "id": "flyspeed-5", "position": { "x": 4, "y": 0, "z": 35 }, "material": "feather", "speed": 1.4, "prev": "flyspeed-4" }
+]

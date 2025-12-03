@@ -1,0 +1,7 @@
+[
+  { "id": "home-1", "position": { "x": 0, "y": 0, "z": 7 }, "material": "oak_planks", "prev": null },
+  { "id": "home-2", "position": { "x": 1, "y": 0, "z": 7 }, "material": "oak_planks", "prev": "home-1" },
+  { "id": "home-3", "position": { "x": 2, "y": 0, "z": 7 }, "material": "oak_planks", "prev": "home-2" },
+  { "id": "home-4", "position": { "x": 1, "y": 1, "z": 7 }, "material": "glass", "prev": "home-3" },
+  { "id": "home-5", "position": { "x": 1, "y": 2, "z": 7 }, "material": "lantern", "prev": "home-4" }
+]

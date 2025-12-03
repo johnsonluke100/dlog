@@ -1,0 +1,10 @@
+[
+  { "id": "explore-1", "position": { "x": 0, "y": 0, "z": 18 }, "material": "sand", "prev": null },
+  { "id": "explore-2", "position": { "x": 1, "y": 0, "z": 18 }, "material": "sandstone", "prev": "explore-1" },
+  { "id": "explore-3", "position": { "x": 2, "y": 0, "z": 18 }, "material": "red_sand", "prev": "explore-2" },
+  { "id": "explore-4", "position": { "x": 3, "y": 0, "z": 18 }, "material": "red_sandstone", "prev": "explore-3" },
+  { "id": "explore-5", "position": { "x": 4, "y": 0, "z": 18 }, "material": "sandstone", "prev": "explore-4" },
+  { "id": "explore-6", "position": { "x": 1, "y": 1, "z": 18 }, "material": "sand", "prev": "explore-5" },
+  { "id": "explore-7", "position": { "x": 2, "y": 1, "z": 18 }, "material": "sandstone", "prev": "explore-6" },
+  { "id": "explore-8", "position": { "x": 3, "y": 1, "z": 18 }, "material": "red_sand", "prev": "explore-7" }
+]

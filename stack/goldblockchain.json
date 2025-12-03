@@ -1,0 +1,7 @@
+[
+  { "id": "goldblock-1", "position": { "x": 0, "y": 0, "z": 28 }, "material": "gold_block", "prev": null },
+  { "id": "goldblock-2", "position": { "x": 1, "y": 0, "z": 28 }, "material": "gold_block", "prev": "goldblock-1" },
+  { "id": "goldblock-3", "position": { "x": 2, "y": 0, "z": 28 }, "material": "gold_block", "prev": "goldblock-2" },
+  { "id": "goldblock-4", "position": { "x": 3, "y": 0, "z": 28 }, "material": "gold_block", "prev": "goldblock-3" },
+  { "id": "goldblock-5", "position": { "x": 4, "y": 0, "z": 28 }, "material": "gold_block", "prev": "goldblock-4" }
+]

@@ -1,0 +1,7 @@
+[
+  { "id": "paint-1", "position": { "x": 0, "y": 0, "z": 150 }, "material": "wool", "color": "red", "prev": null },
+  { "id": "paint-2", "position": { "x": 1, "y": 0, "z": 150 }, "material": "wool", "color": "orange", "prev": "paint-1" },
+  { "id": "paint-3", "position": { "x": 2, "y": 0, "z": 150 }, "material": "wool", "color": "yellow", "prev": "paint-2" },
+  { "id": "paint-4", "position": { "x": 3, "y": 0, "z": 150 }, "material": "wool", "color": "green", "prev": "paint-3" },
+  { "id": "paint-5", "position": { "x": 4, "y": 0, "z": 150 }, "material": "wool", "color": "blue", "prev": "paint-4" }
+]

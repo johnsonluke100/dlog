@@ -1,0 +1,6 @@
+[
+  { "id": "sha-less-1", "position": { "x": 0, "y": 0, "z": 0 }, "material": "barrier", "prev": null },
+  { "id": "sha-less-2", "position": { "x": 1, "y": 0, "z": 0 }, "material": "paper", "prev": "sha-less-1" },
+  { "id": "sha-less-3", "position": { "x": 2, "y": 0, "z": 0 }, "material": "paper", "prev": "sha-less-2" },
+  { "id": "sha-less-4", "position": { "x": 3, "y": 0, "z": 0 }, "material": "paper", "prev": "sha-less-3" }
+]

@@ -1,0 +1,10 @@
+[
+  { "id": "emerald-1", "position": { "x": 0, "y": 0, "z": 3 }, "material": "emerald", "prev": null },
+  { "id": "emerald-2", "position": { "x": 1, "y": 0, "z": 3 }, "material": "emerald", "prev": "emerald-1" },
+  { "id": "emerald-3", "position": { "x": 2, "y": 0, "z": 3 }, "material": "emerald", "prev": "emerald-2" },
+  { "id": "emerald-4", "position": { "x": 3, "y": 0, "z": 3 }, "material": "emerald", "prev": "emerald-3" },
+  { "id": "emerald-5", "position": { "x": 4, "y": 0, "z": 3 }, "material": "emerald", "prev": "emerald-4" },
+  { "id": "emerald-6", "position": { "x": 1, "y": 1, "z": 3 }, "material": "emerald", "prev": "emerald-5" },
+  { "id": "emerald-7", "position": { "x": 2, "y": 1, "z": 3 }, "material": "emerald", "prev": "emerald-6" },
+  { "id": "emerald-8", "position": { "x": 3, "y": 1, "z": 3 }, "material": "emerald", "prev": "emerald-7" }
+]

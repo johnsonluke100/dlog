@@ -1,0 +1,7 @@
+[
+  { "id": "sound-1", "position": { "x": 0, "y": 5, "z": 0 }, "material": "note_block", "note": "C4" },
+  { "id": "sound-2", "position": { "x": 1, "y": 5, "z": 0 }, "material": "note_block", "note": "E4" },
+  { "id": "sound-3", "position": { "x": -1, "y": 5, "z": 0 }, "material": "note_block", "note": "G4" },
+  { "id": "sound-4", "position": { "x": 0, "y": 5, "z": 1 }, "material": "note_block", "note": "B4" },
+  { "id": "sound-5", "position": { "x": 0, "y": 5, "z": -1 }, "material": "note_block", "note": "D5" }
+]

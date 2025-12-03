@@ -1,0 +1,7 @@
+[
+  { "id": "time-1", "position": { "x": 0, "y": 0, "z": 130 }, "material": "redstone_block", "tick_ms": 50, "prev": null },
+  { "id": "time-2", "position": { "x": 1, "y": 0, "z": 130 }, "material": "redstone_block", "tick_ms": 45, "prev": "time-1" },
+  { "id": "time-3", "position": { "x": 2, "y": 0, "z": 130 }, "material": "redstone_block", "tick_ms": 40, "prev": "time-2" },
+  { "id": "time-4", "position": { "x": 3, "y": 0, "z": 130 }, "material": "redstone_block", "tick_ms": 35, "prev": "time-3" },
+  { "id": "time-5", "position": { "x": 4, "y": 0, "z": 130 }, "material": "redstone_block", "tick_ms": 30, "prev": "time-4" }
+]

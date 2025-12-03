@@ -1,0 +1,7 @@
+[
+  { "id": "carpet-1", "position": { "x": 0, "y": 0, "z": 43 }, "material": "red_carpet", "prev": null },
+  { "id": "carpet-2", "position": { "x": 1, "y": 0, "z": 43 }, "material": "orange_carpet", "prev": "carpet-1" },
+  { "id": "carpet-3", "position": { "x": 2, "y": 0, "z": 43 }, "material": "yellow_carpet", "prev": "carpet-2" },
+  { "id": "carpet-4", "position": { "x": 3, "y": 0, "z": 43 }, "material": "green_carpet", "prev": "carpet-3" },
+  { "id": "carpet-5", "position": { "x": 4, "y": 0, "z": 43 }, "material": "blue_carpet", "prev": "carpet-4" }
+]

@@ -1,0 +1,7 @@
+[
+  { "id": "rise-1", "coords": { "x": 0, "y": 8, "z": 0 }, "material": "air", "prev": null },
+  { "id": "rise-2", "coords": { "x": -1, "y": 9, "z": 0 }, "material": "air", "prev": "rise-1" },
+  { "id": "rise-3", "coords": { "x": -2, "y": 10, "z": 0 }, "material": "air", "prev": "rise-2" },
+  { "id": "rise-4", "coords": { "x": -3, "y": 11, "z": 0 }, "material": "air", "prev": "rise-3" },
+  { "id": "rise-5", "coords": { "x": -4, "y": 12, "z": 0 }, "material": "air", "prev": "rise-4" }
+]

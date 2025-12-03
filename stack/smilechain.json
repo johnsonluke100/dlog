@@ -1,0 +1,7 @@
+[
+  { "id": "smile-1", "position": { "x": 0, "y": 0, "z": -1 }, "material": "gold", "prev": null },
+  { "id": "smile-2", "position": { "x": 1, "y": 0, "z": -1 }, "material": "gold", "prev": "smile-1" },
+  { "id": "smile-3", "position": { "x": 2, "y": 0, "z": -1 }, "material": "gold", "prev": "smile-2" },
+  { "id": "smile-4", "position": { "x": 1, "y": 1, "z": -1 }, "material": "gold", "prev": "smile-3" },
+  { "id": "smile-5", "position": { "x": 1, "y": 2, "z": -1 }, "material": "gold", "prev": "smile-4" }
+]

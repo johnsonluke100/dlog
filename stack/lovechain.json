@@ -1,0 +1,8 @@
+[
+  { "id": "love-1", "position": { "x": 0, "y": 0, "z": 10 }, "material": "pink_wool", "prev": null },
+  { "id": "love-2", "position": { "x": 1, "y": 0, "z": 10 }, "material": "pink_wool", "prev": "love-1" },
+  { "id": "love-3", "position": { "x": 2, "y": 0, "z": 10 }, "material": "pink_wool", "prev": "love-2" },
+  { "id": "love-4", "position": { "x": 3, "y": 0, "z": 10 }, "material": "pink_wool", "prev": "love-3" },
+  { "id": "love-5", "position": { "x": 1, "y": 1, "z": 10 }, "material": "red_wool", "prev": "love-4" },
+  { "id": "love-6", "position": { "x": 2, "y": 1, "z": 10 }, "material": "red_wool", "prev": "love-5" }
+]

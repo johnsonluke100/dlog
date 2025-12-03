@@ -9,15 +9,17 @@ Crates:
 - `core`      → coordination layer between phi physics and chain logic
 - `omega`     → Omega Phi 8888 Hz "Leidenfrost Flame Engine" (Rust)
 - `sky`       → SkyLighting logic: slideshows, frame selection, phi-based sky timeline
-- `api`       → HTTP server exposing a minimal JSON API over universe + sky + canon-spec helpers
+- `api`       → HTTP server exposing a minimal JSON API over universe + sky + canon-spec helpers, plus `/v1/hypercube/summary` and a Paper WebSocket bridge (`/ws/paper`, `/v1/paper/status`)
 
 Top-level:
 
 - `Cargo.toml`          → workspace definition
 - `rust-toolchain.toml` → pinned toolchain for reproducible builds
 - `dlog.toml`           → node configuration (bind, phi, paths)
-- `Dockerfile`          → container build for the `dlog-api` binary
+- `Dockerfile`          → container build for the `dlog_gold_http` binary
+- `Dockerfile.api`      → container build for the `api` binary (binds to `$PORT`, defaults 8080)
 - `docker-compose.yml`  → simple compose stack for local docker runs
+- `docs/hypercube.md`   → condensed canon-spec (hypercube) summary for quick reference
 
 Launcher:
 

@@ -1,0 +1,7 @@
+[
+  { "id": "lightning-1", "coords": { "x": 0, "y": 8, "z": 0 }, "intensity": 1.0, "prev": null },
+  { "id": "lightning-2", "coords": { "x": 1, "y": 8, "z": 0 }, "intensity": 0.9, "prev": "lightning-1" },
+  { "id": "lightning-3", "coords": { "x": -1, "y": 8, "z": 0 }, "intensity": 0.9, "prev": "lightning-2" },
+  { "id": "lightning-4", "coords": { "x": 0, "y": 8, "z": 1 }, "intensity": 0.8, "prev": "lightning-3" },
+  { "id": "lightning-5", "coords": { "x": 0, "y": 8, "z": -1 }, "intensity": 0.8, "prev": "lightning-4" }
+]

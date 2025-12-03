@@ -1,0 +1,19 @@
+[
+  { "id": "block-1", "position": { "x": 0, "y": 0, "z": 0 }, "material": "barrier", "prev": null },
+  { "id": "paper-1", "position": { "x": 1, "y": 1, "z": 0 }, "material": "paper", "prev": "block-1" },
+  { "id": "paper-2", "position": { "x": 2, "y": 1, "z": 0 }, "material": "paper", "prev": "paper-1" },
+  { "id": "paper-3", "position": { "x": 3, "y": 1, "z": 0 }, "material": "paper", "prev": "paper-2" },
+  { "id": "paper-4", "position": { "x": 4, "y": 1, "z": 0 }, "material": "paper", "prev": "paper-3" },
+  { "id": "paper-5", "position": { "x": 5, "y": 1, "z": 0 }, "material": "paper", "prev": "paper-4" },
+  { "id": "paper-6", "position": { "x": 6, "y": 1, "z": 0 }, "material": "paper", "prev": "paper-5" },
+  { "id": "paper-7", "position": { "x": 7, "y": 1, "z": 0 }, "material": "paper", "prev": "paper-6" },
+  { "id": "paper-8", "position": { "x": 8, "y": 1, "z": 0 }, "material": "paper", "prev": "paper-7" },
+  { "id": "gold-1", "position": { "x": 2, "y": 2, "z": 0 }, "material": "gold", "prev": "paper-8" },
+  { "id": "gold-2", "position": { "x": 2, "y": 2, "z": 1 }, "material": "gold", "prev": "gold-1" },
+  { "id": "gold-3", "position": { "x": 2, "y": 2, "z": -1 }, "material": "gold", "prev": "gold-2" },
+  { "id": "gold-4", "position": { "x": 2, "y": 2, "z": 2 }, "material": "gold", "prev": "gold-3" },
+  { "id": "gold-5", "position": { "x": 2, "y": 2, "z": -2 }, "material": "gold", "prev": "gold-4" },
+  { "id": "gold-6", "position": { "x": 3, "y": 2, "z": -2 }, "material": "gold", "prev": "gold-5" },
+  { "id": "gold-7", "position": { "x": 3, "y": 2, "z": -1 }, "material": "gold", "prev": "gold-6" },
+  { "id": "gold-8", "position": { "x": 3, "y": 2, "z": 0 }, "material": "gold", "prev": "gold-7" }
+]

@@ -1,0 +1,7 @@
+[
+  { "id": "omegafloat-1", "position": { "x": 0, "y": 6, "z": 40 }, "material": "infinity", "tag": "∞", "prev": null },
+  { "id": "omegafloat-2", "position": { "x": 1, "y": 6, "z": 40 }, "material": "infinity", "tag": "∞", "prev": "omegafloat-1" },
+  { "id": "omegafloat-3", "position": { "x": 2, "y": 6, "z": 40 }, "material": "infinity", "tag": "∞", "prev": "omegafloat-2" },
+  { "id": "omegafloat-4", "position": { "x": 3, "y": 6, "z": 40 }, "material": "infinity", "tag": "∞", "prev": "omegafloat-3" },
+  { "id": "omegafloat-5", "position": { "x": 4, "y": 6, "z": 40 }, "material": "infinity", "tag": "∞", "prev": "omegafloat-4" }
+]

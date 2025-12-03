@@ -1,0 +1,8 @@
+[
+  { "id": "happy-1", "position": { "x": 0, "y": 0, "z": 2 }, "material": "diamond", "prev": null },
+  { "id": "happy-2", "position": { "x": 1, "y": 0, "z": 2 }, "material": "diamond", "prev": "happy-1" },
+  { "id": "happy-3", "position": { "x": 2, "y": 0, "z": 2 }, "material": "diamond", "prev": "happy-2" },
+  { "id": "happy-4", "position": { "x": 3, "y": 0, "z": 2 }, "material": "diamond", "prev": "happy-3" },
+  { "id": "happy-5", "position": { "x": 1, "y": 1, "z": 2 }, "material": "diamond", "prev": "happy-4" },
+  { "id": "happy-6", "position": { "x": 2, "y": 1, "z": 2 }, "material": "diamond", "prev": "happy-5" }
+]

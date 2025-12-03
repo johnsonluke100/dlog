@@ -1,0 +1,7 @@
+[
+  { "id": "fork-1", "freq_hz": 8888, "coords": { "x": 0, "y": 6, "z": 0 }, "prev": null },
+  { "id": "fork-2", "freq_hz": 8888, "coords": { "x": 1, "y": 6, "z": 0 }, "prev": "fork-1" },
+  { "id": "fork-3", "freq_hz": 8888, "coords": { "x": -1, "y": 6, "z": 0 }, "prev": "fork-2" },
+  { "id": "fork-4", "freq_hz": 8888, "coords": { "x": 0, "y": 6, "z": 1 }, "prev": "fork-3" },
+  { "id": "fork-5", "freq_hz": 8888, "coords": { "x": 0, "y": 6, "z": -1 }, "prev": "fork-4" }
+]

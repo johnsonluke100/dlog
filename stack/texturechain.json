@@ -1,0 +1,7 @@
+[
+  { "id": "tex-1", "coords": { "x": 0, "y": 11, "z": 0 }, "material": "wool", "texture": "smooth", "prev": null },
+  { "id": "tex-2", "coords": { "x": 1, "y": 11, "z": 0 }, "material": "wool", "texture": "rough", "prev": "tex-1" },
+  { "id": "tex-3", "coords": { "x": 2, "y": 11, "z": 0 }, "material": "wool", "texture": "grainy", "prev": "tex-2" },
+  { "id": "tex-4", "coords": { "x": 3, "y": 11, "z": 0 }, "material": "wool", "texture": "glossy", "prev": "tex-3" },
+  { "id": "tex-5", "coords": { "x": 4, "y": 11, "z": 0 }, "material": "wool", "texture": "matte", "prev": "tex-4" }
+]

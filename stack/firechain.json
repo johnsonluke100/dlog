@@ -1,0 +1,8 @@
+[
+  { "id": "firechain-1", "position": { "x": 0, "y": 0, "z": 16 }, "material": "fire", "prev": null },
+  { "id": "firechain-2", "position": { "x": 1, "y": 0, "z": 16 }, "material": "fire", "prev": "firechain-1" },
+  { "id": "firechain-3", "position": { "x": 2, "y": 0, "z": 16 }, "material": "fire", "prev": "firechain-2" },
+  { "id": "firechain-4", "position": { "x": 3, "y": 0, "z": 16 }, "material": "fire", "prev": "firechain-3" },
+  { "id": "firechain-5", "position": { "x": 1, "y": 1, "z": 16 }, "material": "fire", "prev": "firechain-4" },
+  { "id": "firechain-6", "position": { "x": 2, "y": 1, "z": 16 }, "material": "fire", "prev": "firechain-5" }
+]

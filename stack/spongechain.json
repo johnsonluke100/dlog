@@ -1,0 +1,7 @@
+[
+  { "id": "sponge-1", "position": { "x": 0, "y": 0, "z": 30 }, "material": "sponge", "prev": null },
+  { "id": "sponge-2", "position": { "x": 1, "y": 0, "z": 30 }, "material": "sponge", "prev": "sponge-1" },
+  { "id": "sponge-3", "position": { "x": 2, "y": 0, "z": 30 }, "material": "sponge", "prev": "sponge-2" },
+  { "id": "sponge-4", "position": { "x": 3, "y": 0, "z": 30 }, "material": "sponge", "prev": "sponge-3" },
+  { "id": "sponge-5", "position": { "x": 4, "y": 0, "z": 30 }, "material": "sponge", "prev": "sponge-4" }
+]

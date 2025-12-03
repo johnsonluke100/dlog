@@ -1,0 +1,56 @@
+[
+  {
+    "id": "block-1",
+    "position": { "x": 0, "y": 0, "z": 0 },
+    "material": "barrier",
+    "prev": null
+  },
+  {
+    "id": "paper-1",
+    "position": { "x": 1, "y": 0, "z": 0 },
+    "material": "paper",
+    "prev": "block-1"
+  },
+  {
+    "id": "paper-2",
+    "position": { "x": 2, "y": 0, "z": 0 },
+    "material": "paper",
+    "prev": "paper-1"
+  },
+  {
+    "id": "paper-3",
+    "position": { "x": 3, "y": 0, "z": 0 },
+    "material": "paper",
+    "prev": "paper-2"
+  },
+  {
+    "id": "paper-4",
+    "position": { "x": 4, "y": 0, "z": 0 },
+    "material": "paper",
+    "prev": "paper-3"
+  },
+  {
+    "id": "paper-5",
+    "position": { "x": 5, "y": 0, "z": 0 },
+    "material": "paper",
+    "prev": "paper-4"
+  },
+  {
+    "id": "paper-6",
+    "position": { "x": 6, "y": 0, "z": 0 },
+    "material": "paper",
+    "prev": "paper-5"
+  },
+  {
+    "id": "paper-7",
+    "position": { "x": 7, "y": 0, "z": 0 },
+    "material": "paper",
+    "prev": "paper-6"
+  },
+  {
+    "id": "paper-8",
+    "position": { "x": 8, "y": 0, "z": 0 },
+    "material": "paper",
+    "prev": "paper-7"
+  }
+]

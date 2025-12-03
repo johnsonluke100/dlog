@@ -1,0 +1,10 @@
+[
+  { "id": "aria-vault-1", "position": { "x": 0, "y": 0, "z": 90 }, "material": "vault", "note": "AriaVault placeholder block", "prev": null },
+  { "id": "aria-vault-2", "position": { "x": 1, "y": 0, "z": 90 }, "material": "vault", "note": "AriaVault block 2", "prev": "aria-vault-1" },
+  { "id": "aria-vault-3", "position": { "x": 2, "y": 0, "z": 90 }, "material": "vault", "note": "AriaVault block 3", "prev": "aria-vault-2" },
+  { "id": "aria-vault-4", "position": { "x": 3, "y": 0, "z": 90 }, "material": "vault", "note": "AriaVault block 4", "prev": "aria-vault-3" },
+  { "id": "aria-vault-5", "position": { "x": 4, "y": 0, "z": 90 }, "material": "vault", "note": "AriaVault block 5", "prev": "aria-vault-4" },
+  { "id": "aria-vault-6", "position": { "x": 5, "y": 0, "z": 90 }, "material": "vault", "note": "AriaVault block 6", "prev": "aria-vault-5" },
+  { "id": "aria-vault-7", "position": { "x": 6, "y": 0, "z": 90 }, "material": "vault", "note": "AriaVault block 7", "prev": "aria-vault-6" },
+  { "id": "aria-vault-8", "position": { "x": 7, "y": 0, "z": 90 }, "material": "vault", "note": "AriaVault block 8", "prev": "aria-vault-7" }
+]

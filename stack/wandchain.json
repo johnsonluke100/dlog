@@ -1,0 +1,7 @@
+[
+  { "id": "wand-1", "position": { "x": 0, "y": 0, "z": 46 }, "material": "stick", "prev": null },
+  { "id": "wand-2", "position": { "x": 1, "y": 0, "z": 46 }, "material": "stick", "prev": "wand-1" },
+  { "id": "wand-3", "position": { "x": 2, "y": 0, "z": 46 }, "material": "stick", "prev": "wand-2" },
+  { "id": "wand-4", "position": { "x": 3, "y": 0, "z": 46 }, "material": "stick", "prev": "wand-3" },
+  { "id": "wand-5", "position": { "x": 4, "y": 0, "z": 46 }, "material": "stick", "prev": "wand-4" }
+]

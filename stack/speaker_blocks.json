@@ -1,0 +1,7 @@
+[
+  { "id": "speaker-1", "position": { "x": 2, "y": 3, "z": 0 }, "material": "speaker", "note": "hz-8888 rail 1" },
+  { "id": "speaker-2", "position": { "x": 2, "y": 3, "z": 1 }, "material": "speaker", "note": "hz-8888 rail 2" },
+  { "id": "speaker-3", "position": { "x": 2, "y": 3, "z": -1 }, "material": "speaker", "note": "hz-8888 rail 3" },
+  { "id": "speaker-4", "position": { "x": 2, "y": 3, "z": 2 }, "material": "speaker", "note": "hz-8888 rail 4" },
+  { "id": "speaker-5", "position": { "x": 2, "y": 3, "z": -2 }, "material": "speaker", "note": "hz-8888 rail 5" }
+]

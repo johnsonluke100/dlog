@@ -1,0 +1,9 @@
+[
+  { "id": "vision-1", "position": { "x": 0, "y": 0, "z": 19 }, "material": "glass", "prev": null },
+  { "id": "vision-2", "position": { "x": 1, "y": 0, "z": 19 }, "material": "glass", "prev": "vision-1" },
+  { "id": "vision-3", "position": { "x": 2, "y": 0, "z": 19 }, "material": "glass", "prev": "vision-2" },
+  { "id": "vision-4", "position": { "x": 3, "y": 0, "z": 19 }, "material": "glass", "prev": "vision-3" },
+  { "id": "vision-5", "position": { "x": 1, "y": 1, "z": 19 }, "material": "glass", "prev": "vision-4" },
+  { "id": "vision-6", "position": { "x": 2, "y": 1, "z": 19 }, "material": "glass", "prev": "vision-5" },
+  { "id": "vision-7", "position": { "x": 1, "y": 2, "z": 19 }, "material": "glass", "prev": "vision-6" }
+]

@@ -1,0 +1,7 @@
+[
+  { "id": "shadow-1", "coords": { "x": 0, "y": -1, "z": 0 }, "material": "void" },
+  { "id": "shadow-2", "coords": { "x": 1, "y": -1, "z": 0 }, "material": "void" },
+  { "id": "shadow-3", "coords": { "x": -1, "y": -1, "z": 0 }, "material": "void" },
+  { "id": "shadow-4", "coords": { "x": 0, "y": -1, "z": 1 }, "material": "void" },
+  { "id": "shadow-5", "coords": { "x": 0, "y": -1, "z": -1 }, "material": "void" }
+]

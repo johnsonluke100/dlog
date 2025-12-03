@@ -1,0 +1,7 @@
+[
+  { "id": "fire-1", "position": { "x": 0, "y": 3, "z": 0 }, "material": "fire" },
+  { "id": "fire-2", "position": { "x": 1, "y": 3, "z": 0 }, "material": "fire" },
+  { "id": "fire-3", "position": { "x": -1, "y": 3, "z": 0 }, "material": "fire" },
+  { "id": "fire-4", "position": { "x": 0, "y": 3, "z": 1 }, "material": "fire" },
+  { "id": "fire-5", "position": { "x": 0, "y": 3, "z": -1 }, "material": "fire" }
+]

@@ -1,0 +1,18 @@
+[
+  { "id": "world-1", "position": { "x": 0, "y": 0, "z": 52 }, "material": "stone", "prev": null },
+  { "id": "world-2", "position": { "x": 1, "y": 0, "z": 53 }, "material": "stone", "prev": "world-1" },
+  { "id": "world-3", "position": { "x": 2, "y": 0, "z": 54 }, "material": "stone", "prev": "world-2" },
+  { "id": "world-4", "position": { "x": 3, "y": 0, "z": 55 }, "material": "stone", "prev": "world-3" },
+  { "id": "world-5", "position": { "x": 4, "y": 0, "z": 56 }, "material": "stone", "prev": "world-4" },
+  { "id": "world-6", "position": { "x": 3, "y": 0, "z": 57 }, "material": "stone", "prev": "world-5" },
+  { "id": "world-7", "position": { "x": 2, "y": 0, "z": 58 }, "material": "stone", "prev": "world-6" },
+  { "id": "world-8", "position": { "x": 1, "y": 0, "z": 59 }, "material": "stone", "prev": "world-7" },
+  { "id": "world-9", "position": { "x": 0, "y": 0, "z": 60 }, "material": "stone", "prev": "world-8" },
+  { "id": "world-10", "position": { "x": -1, "y": 0, "z": 59 }, "material": "stone", "prev": "world-9" },
+  { "id": "world-11", "position": { "x": -2, "y": 0, "z": 58 }, "material": "stone", "prev": "world-10" },
+  { "id": "world-12", "position": { "x": -3, "y": 0, "z": 57 }, "material": "stone", "prev": "world-11" },
+  { "id": "world-13", "position": { "x": -4, "y": 0, "z": 56 }, "material": "stone", "prev": "world-12" },
+  { "id": "world-14", "position": { "x": -3, "y": 0, "z": 55 }, "material": "stone", "prev": "world-13" },
+  { "id": "world-15", "position": { "x": -2, "y": 0, "z": 54 }, "material": "stone", "prev": "world-14" },
+  { "id": "world-16", "position": { "x": -1, "y": 0, "z": 53 }, "material": "stone", "prev": "world-15" }
+]

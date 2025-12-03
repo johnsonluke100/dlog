@@ -1,0 +1,7 @@
+[
+  { "id": "note-1", "position": { "x": 0, "y": 0, "z": 25 }, "material": "note_block", "note": "C4", "prev": null },
+  { "id": "note-2", "position": { "x": 1, "y": 0, "z": 25 }, "material": "note_block", "note": "E4", "prev": "note-1" },
+  { "id": "note-3", "position": { "x": 2, "y": 0, "z": 25 }, "material": "note_block", "note": "G4", "prev": "note-2" },
+  { "id": "note-4", "position": { "x": 3, "y": 0, "z": 25 }, "material": "note_block", "note": "B4", "prev": "note-3" },
+  { "id": "note-5", "position": { "x": 4, "y": 0, "z": 25 }, "material": "note_block", "note": "D5", "prev": "note-4" }
+]

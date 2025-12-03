@@ -1,0 +1,8 @@
+[
+  { "id": "xaut-1", "position": { "x": 0, "y": 0, "z": 6 }, "material": "gold", "prev": null, "asset": "XAUT" },
+  { "id": "xaut-2", "position": { "x": 1, "y": 0, "z": 6 }, "material": "gold", "prev": "xaut-1", "asset": "XAUT" },
+  { "id": "xaut-3", "position": { "x": 2, "y": 0, "z": 6 }, "material": "gold", "prev": "xaut-2", "asset": "XAUT" },
+  { "id": "xaut-4", "position": { "x": 3, "y": 0, "z": 6 }, "material": "gold", "prev": "xaut-3", "asset": "XAUT" },
+  { "id": "xaut-5", "position": { "x": 1, "y": 1, "z": 6 }, "material": "gold", "prev": "xaut-4", "asset": "XAUT" },
+  { "id": "xaut-6", "position": { "x": 2, "y": 1, "z": 6 }, "material": "gold", "prev": "xaut-5", "asset": "XAUT" }
+]

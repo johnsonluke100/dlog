@@ -1,0 +1,38 @@
+[
+  {
+    "id": "super-1",
+    "positions": [
+      { "x": 0, "y": 0, "z": 91, "prob": 0.5 },
+      { "x": 0, "y": 0, "z": 92, "prob": 0.5 }
+    ],
+    "materials": [
+      { "type": "stone", "prob": 0.5 },
+      { "type": "glass", "prob": 0.5 }
+    ],
+    "prev": null
+  },
+  {
+    "id": "super-2",
+    "positions": [
+      { "x": 1, "y": 0, "z": 91, "prob": 0.5 },
+      { "x": 1, "y": 0, "z": 92, "prob": 0.5 }
+    ],
+    "materials": [
+      { "type": "stone", "prob": 0.5 },
+      { "type": "glass", "prob": 0.5 }
+    ],
+    "prev": "super-1"
+  },
+  {
+    "id": "super-3",
+    "positions": [
+      { "x": 2, "y": 0, "z": 91, "prob": 0.5 },
+      { "x": 2, "y": 0, "z": 92, "prob": 0.5 }
+    ],
+    "materials": [
+      { "type": "stone", "prob": 0.5 },
+      { "type": "glass", "prob": 0.5 }
+    ],
+    "prev": "super-2"
+  }
+]

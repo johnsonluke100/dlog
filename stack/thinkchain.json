@@ -1,0 +1,8 @@
+[
+  { "id": "think-1", "position": { "x": 0, "y": 0, "z": 22 }, "material": "bookshelf", "prev": null },
+  { "id": "think-2", "position": { "x": 1, "y": 0, "z": 22 }, "material": "bookshelf", "prev": "think-1" },
+  { "id": "think-3", "position": { "x": 2, "y": 0, "z": 22 }, "material": "bookshelf", "prev": "think-2" },
+  { "id": "think-4", "position": { "x": 3, "y": 0, "z": 22 }, "material": "bookshelf", "prev": "think-3" },
+  { "id": "think-5", "position": { "x": 1, "y": 1, "z": 22 }, "material": "lectern", "prev": "think-4" },
+  { "id": "think-6", "position": { "x": 2, "y": 1, "z": 22 }, "material": "lectern", "prev": "think-5" }
+]

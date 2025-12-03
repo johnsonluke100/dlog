@@ -1,0 +1,37 @@
+[
+  {
+    "id": "sv-1",
+    "coords": { "x": 0, "y": 11, "z": 0 },
+    "material": "speaker",
+    "hz": 8888,
+    "prev": null
+  },
+  {
+    "id": "sv-2",
+    "coords": { "x": 1, "y": 11, "z": 0 },
+    "material": "speaker",
+    "hz": 8888,
+    "prev": "sv-1"
+  },
+  {
+    "id": "sv-3",
+    "coords": { "x": 1, "y": 11, "z": 1 },
+    "material": "speaker",
+    "hz": 8888,
+    "prev": "sv-2"
+  },
+  {
+    "id": "sv-4",
+    "coords": { "x": 0, "y": 11, "z": 1 },
+    "material": "speaker",
+    "hz": 8888,
+    "prev": "sv-3"
+  },
+  {
+    "id": "sv-5",
+    "coords": { "x": -1, "y": 11, "z": 1 },
+    "material": "speaker",
+    "hz": 8888,
+    "prev": "sv-4"
+  }
+]

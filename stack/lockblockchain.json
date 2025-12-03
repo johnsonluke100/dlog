@@ -1,0 +1,7 @@
+[
+  { "id": "lock-1", "position": { "x": 0, "y": 0, "z": 110 }, "material": "iron_door", "prev": null },
+  { "id": "lock-2", "position": { "x": 1, "y": 0, "z": 110 }, "material": "iron_door", "prev": "lock-1" },
+  { "id": "lock-3", "position": { "x": 2, "y": 0, "z": 110 }, "material": "iron_door", "prev": "lock-2" },
+  { "id": "lock-4", "position": { "x": 3, "y": 0, "z": 110 }, "material": "iron_door", "prev": "lock-3" },
+  { "id": "lock-5", "position": { "x": 4, "y": 0, "z": 110 }, "material": "iron_door", "prev": "lock-4" }
+]

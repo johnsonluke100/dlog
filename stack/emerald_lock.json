@@ -1,0 +1,9 @@
+{
+  "id": "emerald-lock-1",
+  "position": { "x": 0, "y": 0, "z": 4 },
+  "material": "emerald",
+  "lock": true,
+  "owner": null,
+  "security_level": "medium",
+  "note": "emerald lock placeholder"
+}

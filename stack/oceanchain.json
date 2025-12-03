@@ -1,0 +1,9 @@
+[
+  { "id": "ocean-1", "position": { "x": 0, "y": 0, "z": 15 }, "material": "water", "prev": null },
+  { "id": "ocean-2", "position": { "x": 1, "y": 0, "z": 15 }, "material": "water", "prev": "ocean-1" },
+  { "id": "ocean-3", "position": { "x": 2, "y": 0, "z": 15 }, "material": "water", "prev": "ocean-2" },
+  { "id": "ocean-4", "position": { "x": 3, "y": 0, "z": 15 }, "material": "water", "prev": "ocean-3" },
+  { "id": "ocean-5", "position": { "x": 4, "y": 0, "z": 15 }, "material": "water", "prev": "ocean-4" },
+  { "id": "ocean-6", "position": { "x": 2, "y": 1, "z": 15 }, "material": "water", "prev": "ocean-5" },
+  { "id": "ocean-7", "position": { "x": 2, "y": 2, "z": 15 }, "material": "water", "prev": "ocean-6" }
+]

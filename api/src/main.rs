@@ -1,23 +1,63 @@
-use axum::{routing::{get, post}, Json, Router};
-use axum::http::{HeaderMap, StatusCode};
-use tokio::net::TcpListener;
+use axum::{
+    extract::State,
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+    routing::{get, post},
+    Json, Router,
+};
+use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use spec::{MonetarySpec, PlanetGravityProfile, PLANET_PROFILES, PHI};
+use std::{net::SocketAddr, time::Duration};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpStream},
+    time::timeout,
+};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+#[derive(Clone)]
+struct AppState {
+    paper_addr: SocketAddr,
+}
+
+impl AppState {
+    fn from_env() -> Self {
+        let host = std::env::var("PAPER_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+        let port = std::env::var("PAPER_PORT")
+            .ok()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(25565);
+
+        let paper_addr = format!("{host}:{port}")
+            .parse::<SocketAddr>()
+            .expect("valid PAPER_HOST + PAPER_PORT");
+
+        Self { paper_addr }
+    }
+}
 
 #[tokio::main]
 async fn main() {
     init_tracing();
 
+    let state = AppState::from_env();
+
     let app = Router::new()
+        .route("/", get(root))
         .route("/health", get(health))
+        .route("/v1/hypercube/summary", get(hypercube))
         .route("/v1/spec/monetary", get(monetary))
         .route("/v1/spec/planets", get(planets))
+        .route("/v1/paper/status", get(paper_status))
+        .route("/ws/paper", get(ws_paper))
         // Bridge for the Minecraft plugin → Rust control loop.
-        .route("/tick", post(tick));
+        .route("/tick", post(tick))
+        .with_state(state.clone());
 
     // 8888 here is just a human-friendly port; underneath it's all bits anyway.
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 8888));
+    let addr = listen_addr();
     tracing::info!("dlog Ω-api listening on http://{addr}");
 
     let listener = TcpListener::bind(addr).await.unwrap();
@@ -37,12 +77,39 @@ fn init_tracing() {
         .init();
 }
 
+async fn root(State(state): State<AppState>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "status": "ok",
+        "phi": PHI,
+        "message": "Ω-heartbeat online",
+        "paper_backend": state.paper_addr.to_string(),
+        "endpoints": [
+            "/health",
+            "/v1/hypercube/summary",
+            "/v1/spec/monetary",
+            "/v1/spec/planets",
+            "/v1/paper/status",
+            "/ws/paper",
+            "/tick"
+        ]
+    }))
+}
+
 async fn health() -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "status": "ok",
         "phi": PHI,
         "message": "Ω-heartbeat online"
     }))
+}
+
+fn listen_addr() -> SocketAddr {
+    let port = std::env::var("PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok())
+        .unwrap_or(8888);
+
+    SocketAddr::from(([0, 0, 0, 0], port))
 }
 
 async fn monetary() -> Json<MonetarySpec> {
@@ -57,6 +124,97 @@ struct PlanetsResponse {
 async fn planets() -> Json<PlanetsResponse> {
     Json(PlanetsResponse {
         planets: PLANET_PROFILES.to_vec(),
+    })
+}
+
+// === Hypercube summary ===
+
+#[derive(Serialize)]
+struct HypercubeSummary {
+    title: &'static str,
+    sections: Vec<SummarySection>,
+}
+
+#[derive(Serialize)]
+struct SummarySection {
+    heading: &'static str,
+    points: &'static [&'static str],
+}
+
+async fn hypercube() -> Json<HypercubeSummary> {
+    Json(HypercubeSummary {
+        title: "DLOG / Ω-Physics / Golden Wallet / Canon Spec v3 (hypercube summary)",
+        sections: vec![
+            SummarySection {
+                heading: "Meta layers",
+                points: &[
+                    "NPC layer uses mainstream physics (seconds, meters) only when explicitly asked.",
+                    "Ω layer is default: attention-driven time, phi as the core constant, base-8 rhythms.",
+                ],
+            },
+            SummarySection {
+                heading: "Coin and identity",
+                points: &[
+                    "DLOG is for self-investment and play, not fear-based scarcity.",
+                    "Login via Apple or Google with biometrics; keys stay in device keystores; server sees signatures only.",
+                    "No seed phrases for normal flows; SMS is never the only factor for critical moves.",
+                ],
+            },
+            SummarySection {
+                heading: "Golden Wallet Stack",
+                points: &[
+                    "Backed by three golden rivers (XAUT, BTC, DOGE) spread across 256 keys each.",
+                    "Infinity Bank with Double Infinity Shield so no single actor can drain backing.",
+                    "Luke is lore-level wealthy; focus is safe sharing and play.",
+                ],
+            },
+            SummarySection {
+                heading: "Monetary policy",
+                points: &[
+                    "Holder interest ~61.8% APY; miner inflation ~8.8248% APY; combined ~70% yearly expansion.",
+                    "Per-block factors use phi curves; supply is intentionally expansive.",
+                    "Blocks track attention cycles; humans can approximate as ~8 seconds.",
+                ],
+            },
+            SummarySection {
+                heading: "VORTEX, COMET, labels",
+                points: &[
+                    "Seven VORTEX wells plus one COMET wallet form the top genesis set (88,248 wallets total).",
+                    "Labels map to phone numbers off-chain; each label is an Omega root with its own key.",
+                    "Miners pay a small tithe to fill COMET; overflow flows into VORTEX wells.",
+                ],
+            },
+            SummarySection {
+                heading: "Filesystem",
+                points: &[
+                    "Universe encoded via 9∞ master root; each block unfolds and refolds state.",
+                    "Per-label files use semicolon-delimited segments; dots are avoided in filenames and contents.",
+                ],
+            },
+            SummarySection {
+                heading: "Airdrops and gifts",
+                points: &[
+                    "88,248 genesis wallets; user airdrops decay on a phi curve.",
+                    "Anti-farm: one per phone, Apple/Google ID, and public IP; VPN/datacenter IPs blocked.",
+                    "Gifts are locked ~17 days; sending unlocks with phi-shaped limits after day 18.",
+                ],
+            },
+            SummarySection {
+                heading: "Land and game feel",
+                points: &[
+                    "Hollow planets (Earth, Moon, Mars, Sun) with shell/core inversion teleports.",
+                    "Lock tiers: iron, gold, diamond, emerald; inactivity ~256 days triggers auction.",
+                    "Movement mixes Minecraft sandbox with CS:GO bhop/surf tuned by phi exponents per planet.",
+                ],
+            },
+            SummarySection {
+                heading: "Hosting and rails",
+                points: &[
+                    "Each static IP is eight Omega rails; scaling adds rails (attention lanes).",
+                    "Rust-first workspace with spec/corelib/core/api as anchors; refold.command reshapes the tree.",
+                ],
+            },
+        ],
     })
 }
 
@@ -181,4 +339,90 @@ async fn tick(headers: HeaderMap, axum::extract::Json(req): axum::extract::Json<
     }
 
     Ok(Json(TickResponse { updates }))
+}
+
+// === Paper shim (HTTP/WS bridge) ===
+
+async fn paper_status(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let addr = state.paper_addr;
+    let online = timeout(Duration::from_secs(2), TcpStream::connect(addr))
+        .await
+        .ok()
+        .and_then(|res| res.ok())
+        .is_some();
+
+    Json(serde_json::json!({
+        "address": addr.to_string(),
+        "online": online,
+    }))
+}
+
+async fn ws_paper(
+    State(state): State<AppState>,
+    ws: WebSocketUpgrade,
+) -> impl IntoResponse {
+    let addr = state.paper_addr;
+    ws.on_upgrade(move |socket| handle_ws(socket, addr))
+}
+
+async fn handle_ws(socket: WebSocket, paper_addr: SocketAddr) {
+    tracing::info!("ws bridge connecting to Paper backend at {}", paper_addr);
+
+    match TcpStream::connect(paper_addr).await {
+        Ok(backend) => {
+            if let Err(err) = pipe_ws_to_tcp(socket, backend).await {
+                tracing::warn!("ws bridge error: {}", err);
+            }
+        }
+        Err(err) => {
+            tracing::warn!("failed to connect to Paper backend {}: {}", paper_addr, err);
+        }
+    }
+}
+
+async fn pipe_ws_to_tcp(
+    socket: WebSocket,
+    backend: TcpStream,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let (mut ws_tx, mut ws_rx) = socket.split();
+    let (mut tcp_reader, mut tcp_writer) = backend.into_split();
+
+    let to_tcp = async {
+        while let Some(msg) = ws_rx.next().await {
+            let msg = msg?;
+            match msg {
+                Message::Binary(bytes) => {
+                    tcp_writer.write_all(&bytes).await?;
+                }
+                Message::Text(text) => {
+                    tcp_writer.write_all(text.as_bytes()).await?;
+                    tcp_writer.write_all(b"\n").await?;
+                }
+                Message::Close(_) => break,
+                Message::Ping(_) | Message::Pong(_) => {}
+            }
+        }
+        let _ = tcp_writer.shutdown().await;
+        Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+    };
+
+    let to_ws = async {
+        let mut buf = [0u8; 4096];
+        loop {
+            let n = tcp_reader.read(&mut buf).await?;
+            if n == 0 {
+                break;
+            }
+            ws_tx.send(Message::Binary(buf[..n].to_vec())).await?;
+        }
+        let _ = ws_tx.send(Message::Close(None)).await;
+        Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+    };
+
+    tokio::select! {
+        res = to_tcp => { res?; }
+        res = to_ws => { res?; }
+    }
+
+    Ok(())
 }

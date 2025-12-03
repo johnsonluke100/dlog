@@ -1,0 +1,8 @@
+[
+  { "id": "wood-1", "position": { "x": 0, "y": 0, "z": 100 }, "material": "oak_planks", "prev": null },
+  { "id": "wood-2", "position": { "x": 1, "y": 0, "z": 100 }, "material": "spruce_planks", "prev": "wood-1" },
+  { "id": "wood-3", "position": { "x": 2, "y": 0, "z": 100 }, "material": "birch_planks", "prev": "wood-2" },
+  { "id": "wood-4", "position": { "x": 3, "y": 0, "z": 100 }, "material": "jungle_planks", "prev": "wood-3" },
+  { "id": "wood-5", "position": { "x": 4, "y": 0, "z": 100 }, "material": "acacia_planks", "prev": "wood-4" },
+  { "id": "wood-6", "position": { "x": 5, "y": 0, "z": 100 }, "material": "dark_oak_planks", "prev": "wood-5" }
+]

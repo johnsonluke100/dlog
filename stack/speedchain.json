@@ -1,0 +1,7 @@
+[
+  { "id": "speed-1", "position": { "x": 0, "y": 0, "z": 38 }, "material": "redstone_block", "speed": 1.0, "prev": null },
+  { "id": "speed-2", "position": { "x": 1, "y": 0, "z": 38 }, "material": "redstone_block", "speed": 1.1, "prev": "speed-1" },
+  { "id": "speed-3", "position": { "x": 2, "y": 0, "z": 38 }, "material": "redstone_block", "speed": 1.2, "prev": "speed-2" },
+  { "id": "speed-4", "position": { "x": 3, "y": 0, "z": 38 }, "material": "redstone_block", "speed": 1.3, "prev": "speed-3" },
+  { "id": "speed-5", "position": { "x": 4, "y": 0, "z": 38 }, "material": "redstone_block", "speed": 1.4, "prev": "speed-4" }
+]

@@ -1,0 +1,18 @@
+[
+  { "id": "moon-1", "position": { "x": 0, "y": 0, "z": 61 }, "material": "end_stone", "prev": null },
+  { "id": "moon-2", "position": { "x": 1, "y": 0, "z": 62 }, "material": "end_stone", "prev": "moon-1" },
+  { "id": "moon-3", "position": { "x": 2, "y": 0, "z": 63 }, "material": "end_stone", "prev": "moon-2" },
+  { "id": "moon-4", "position": { "x": 3, "y": 0, "z": 64 }, "material": "end_stone", "prev": "moon-3" },
+  { "id": "moon-5", "position": { "x": 4, "y": 0, "z": 65 }, "material": "end_stone", "prev": "moon-4" },
+  { "id": "moon-6", "position": { "x": 3, "y": 0, "z": 66 }, "material": "end_stone", "prev": "moon-5" },
+  { "id": "moon-7", "position": { "x": 2, "y": 0, "z": 67 }, "material": "end_stone", "prev": "moon-6" },
+  { "id": "moon-8", "position": { "x": 1, "y": 0, "z": 68 }, "material": "end_stone", "prev": "moon-7" },
+  { "id": "moon-9", "position": { "x": 0, "y": 0, "z": 69 }, "material": "end_stone", "prev": "moon-8" },
+  { "id": "moon-10", "position": { "x": -1, "y": 0, "z": 68 }, "material": "end_stone", "prev": "moon-9" },
+  { "id": "moon-11", "position": { "x": -2, "y": 0, "z": 67 }, "material": "end_stone", "prev": "moon-10" },
+  { "id": "moon-12", "position": { "x": -3, "y": 0, "z": 66 }, "material": "end_stone", "prev": "moon-11" },
+  { "id": "moon-13", "position": { "x": -4, "y": 0, "z": 65 }, "material": "end_stone", "prev": "moon-12" },
+  { "id": "moon-14", "position": { "x": -3, "y": 0, "z": 64 }, "material": "end_stone", "prev": "moon-13" },
+  { "id": "moon-15", "position": { "x": -2, "y": 0, "z": 63 }, "material": "end_stone", "prev": "moon-14" },
+  { "id": "moon-16", "position": { "x": -1, "y": 0, "z": 62 }, "material": "end_stone", "prev": "moon-15" }
+]

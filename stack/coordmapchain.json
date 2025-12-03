@@ -1,0 +1,7 @@
+[
+  { "id": "coord-1", "coords": { "x": 0, "y": 0, "z": 80 }, "material": "stone", "prev": null },
+  { "id": "coord-2", "coords": { "x": 1, "y": 0, "z": 81 }, "material": "stone", "prev": "coord-1" },
+  { "id": "coord-3", "coords": { "x": 2, "y": 0, "z": 82 }, "material": "stone", "prev": "coord-2" },
+  { "id": "coord-4", "coords": { "x": 3, "y": 0, "z": 83 }, "material": "stone", "prev": "coord-3" },
+  { "id": "coord-5", "coords": { "x": 4, "y": 0, "z": 84 }, "material": "stone", "prev": "coord-4" }
+]

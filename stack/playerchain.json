@@ -1,0 +1,7 @@
+[
+  { "id": "player-1", "position": { "x": 0, "y": 0, "z": 32 }, "material": "armor_stand", "prev": null },
+  { "id": "player-2", "position": { "x": 1, "y": 0, "z": 32 }, "material": "armor_stand", "prev": "player-1" },
+  { "id": "player-3", "position": { "x": 2, "y": 0, "z": 32 }, "material": "armor_stand", "prev": "player-2" },
+  { "id": "player-4", "position": { "x": 3, "y": 0, "z": 32 }, "material": "armor_stand", "prev": "player-3" },
+  { "id": "player-5", "position": { "x": 4, "y": 0, "z": 32 }, "material": "armor_stand", "prev": "player-4" }
+]

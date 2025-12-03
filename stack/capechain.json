@@ -1,0 +1,7 @@
+[
+  { "id": "cape-1", "position": { "x": 0, "y": 0, "z": 33 }, "material": "banner", "color": "red", "prev": null },
+  { "id": "cape-2", "position": { "x": 1, "y": 0, "z": 33 }, "material": "banner", "color": "blue", "prev": "cape-1" },
+  { "id": "cape-3", "position": { "x": 2, "y": 0, "z": 33 }, "material": "banner", "color": "green", "prev": "cape-2" },
+  { "id": "cape-4", "position": { "x": 3, "y": 0, "z": 33 }, "material": "banner", "color": "yellow", "prev": "cape-3" },
+  { "id": "cape-5", "position": { "x": 4, "y": 0, "z": 33 }, "material": "banner", "color": "violet", "prev": "cape-4" }
+]

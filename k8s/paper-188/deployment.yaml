@@ -5,7 +5,7 @@ metadata:
   labels:
     app: paper-188
 spec:
-  replicas: 1
+  replicas: 8
   selector:
     matchLabels:
       app: paper-188
@@ -15,16 +15,30 @@ spec:
         app: paper-188
     spec:
       securityContext:
-        runAsUser: 10001
-        runAsGroup: 10001
-        fsGroup: 10001
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: paper
-          image: gcr.io/dlog-gold/paper-188:latest
+          image: itzg/minecraft-server:java8
           imagePullPolicy: IfNotPresent
           env:
             - name: EULA
               value: "TRUE"
+            - name: TYPE
+              value: "PAPER"
+            - name: VERSION
+              value: "1.8.8"
+            - name: LEVEL_TYPE
+              value: "FLAT"
+            - name: GENERATOR_SETTINGS
+              value: "minecraft:bedrock,1*minecraft:barrier;1"
+            - name: GENERATE_STRUCTURES
+              value: "false"
+            - name: ALLOW_NETHER
+              value: "false"
+            - name: ALLOW_END
+              value: "false"
           ports:
             - containerPort: 25565
               name: mc
@@ -32,7 +46,7 @@ spec:
               name: dynmap
           resources:
             requests:
-              cpu: "500m"
+              cpu: "200m"
               memory: "1Gi"
             limits:
               cpu: "1"

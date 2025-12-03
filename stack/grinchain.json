@@ -1,0 +1,7 @@
+[
+  { "id": "grin-1", "position": { "x": 0, "y": 0, "z": 1 }, "material": "emerald", "prev": null },
+  { "id": "grin-2", "position": { "x": 1, "y": 0, "z": 1 }, "material": "emerald", "prev": "grin-1" },
+  { "id": "grin-3", "position": { "x": 2, "y": 0, "z": 1 }, "material": "emerald", "prev": "grin-2" },
+  { "id": "grin-4", "position": { "x": 3, "y": 0, "z": 1 }, "material": "emerald", "prev": "grin-3" },
+  { "id": "grin-5", "position": { "x": 4, "y": 0, "z": 1 }, "material": "emerald", "prev": "grin-4" }
+]

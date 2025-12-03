@@ -1,0 +1,7 @@
+[
+  { "id": "skyblock-1", "position": { "x": 0, "y": 100, "z": 0 }, "material": "stone", "prev": null },
+  { "id": "skyblock-2", "position": { "x": 1, "y": 100, "z": 0 }, "material": "stone", "prev": "skyblock-1" },
+  { "id": "skyblock-3", "position": { "x": 2, "y": 100, "z": 0 }, "material": "stone", "prev": "skyblock-2" },
+  { "id": "skyblock-4", "position": { "x": 1, "y": 101, "z": 0 }, "material": "dirt", "prev": "skyblock-3" },
+  { "id": "skyblock-5", "position": { "x": 1, "y": 102, "z": 0 }, "material": "grass_block", "prev": "skyblock-4" }
+]

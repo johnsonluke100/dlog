@@ -1,0 +1,7 @@
+[
+  { "id": "infinity-1", "position": { "x": 0, "y": 0, "z": 34 }, "material": "infinity", "tag": "∞", "prev": null },
+  { "id": "infinity-2", "position": { "x": 1, "y": 0, "z": 34 }, "material": "infinity", "tag": "∞", "prev": "infinity-1" },
+  { "id": "infinity-3", "position": { "x": 2, "y": 0, "z": 34 }, "material": "infinity", "tag": "∞", "prev": "infinity-2" },
+  { "id": "infinity-4", "position": { "x": 3, "y": 0, "z": 34 }, "material": "infinity", "tag": "∞", "prev": "infinity-3" },
+  { "id": "infinity-5", "position": { "x": 4, "y": 0, "z": 34 }, "material": "infinity", "tag": "∞", "prev": "infinity-4" }
+]

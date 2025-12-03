@@ -1,0 +1,11 @@
+[
+  { "id": "door-1", "position": { "x": 0, "y": 0, "z": 20 }, "material": "oak_door", "prev": null },
+  { "id": "door-2", "position": { "x": 1, "y": 0, "z": 20 }, "material": "oak_door", "prev": "door-1" },
+  { "id": "door-3", "position": { "x": 2, "y": 0, "z": 20 }, "material": "oak_door", "prev": "door-2" },
+  { "id": "door-4", "position": { "x": 3, "y": 0, "z": 20 }, "material": "oak_door", "prev": "door-3" },
+  { "id": "door-5", "position": { "x": 1, "y": 1, "z": 20 }, "material": "oak_door", "prev": "door-4" },
+  { "id": "door-6", "position": { "x": 2, "y": 1, "z": 20 }, "material": "oak_door", "prev": "door-5" },
+  { "id": "door-7", "position": { "x": 4, "y": 0, "z": 20 }, "material": "oak_door", "prev": "door-6" },
+  { "id": "door-8", "position": { "x": 5, "y": 0, "z": 20 }, "material": "oak_door", "prev": "door-7" },
+  { "id": "door-9", "position": { "x": 6, "y": 0, "z": 20 }, "material": "oak_door", "prev": "door-8" }
+]

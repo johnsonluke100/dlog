@@ -1,0 +1,10 @@
+[
+  { "id": "paper-chain-1", "position": { "x": 0, "y": 1, "z": 0 }, "material": "paper", "prev": null },
+  { "id": "paper-chain-2", "position": { "x": 1, "y": 1, "z": 0 }, "material": "paper", "prev": "paper-chain-1" },
+  { "id": "paper-chain-3", "position": { "x": 2, "y": 1, "z": 0 }, "material": "paper", "prev": "paper-chain-2" },
+  { "id": "paper-chain-4", "position": { "x": 3, "y": 1, "z": 0 }, "material": "paper", "prev": "paper-chain-3" },
+  { "id": "paper-chain-5", "position": { "x": 4, "y": 1, "z": 0 }, "material": "paper", "prev": "paper-chain-4" },
+  { "id": "paper-chain-6", "position": { "x": 5, "y": 1, "z": 0 }, "material": "paper", "prev": "paper-chain-5" },
+  { "id": "paper-chain-7", "position": { "x": 6, "y": 1, "z": 0 }, "material": "paper", "prev": "paper-chain-6" },
+  { "id": "paper-chain-8", "position": { "x": 7, "y": 1, "z": 0 }, "material": "paper", "prev": "paper-chain-7" }
+]

@@ -1,0 +1,7 @@
+[
+  { "id": "boat-1", "position": { "x": 0, "y": 0, "z": 31 }, "material": "oak_boat", "prev": null },
+  { "id": "boat-2", "position": { "x": 1, "y": 0, "z": 31 }, "material": "oak_boat", "prev": "boat-1" },
+  { "id": "boat-3", "position": { "x": 2, "y": 0, "z": 31 }, "material": "oak_boat", "prev": "boat-2" },
+  { "id": "boat-4", "position": { "x": 3, "y": 0, "z": 31 }, "material": "oak_boat", "prev": "boat-3" },
+  { "id": "boat-5", "position": { "x": 4, "y": 0, "z": 31 }, "material": "oak_boat", "prev": "boat-4" }
+]

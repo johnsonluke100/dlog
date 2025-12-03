@@ -1,0 +1,8 @@
+[
+  { "id": "earth-1", "position": { "x": 0, "y": 0, "z": 17 }, "material": "grass_block", "prev": null },
+  { "id": "earth-2", "position": { "x": 1, "y": 0, "z": 17 }, "material": "grass_block", "prev": "earth-1" },
+  { "id": "earth-3", "position": { "x": 2, "y": 0, "z": 17 }, "material": "grass_block", "prev": "earth-2" },
+  { "id": "earth-4", "position": { "x": 3, "y": 0, "z": 17 }, "material": "grass_block", "prev": "earth-3" },
+  { "id": "earth-5", "position": { "x": 1, "y": 1, "z": 17 }, "material": "grass_block", "prev": "earth-4" },
+  { "id": "earth-6", "position": { "x": 2, "y": 1, "z": 17 }, "material": "grass_block", "prev": "earth-5" }
+]

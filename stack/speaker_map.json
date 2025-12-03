@@ -1,0 +1,9 @@
+{
+  "speakers": [
+    { "id": "speaker-1", "rail": 1, "coords": { "x": 2, "y": 3, "z": 0 }, "hz": 8888 },
+    { "id": "speaker-2", "rail": 2, "coords": { "x": 2, "y": 3, "z": 1 }, "hz": 8888 },
+    { "id": "speaker-3", "rail": 3, "coords": { "x": 2, "y": 3, "z": -1 }, "hz": 8888 },
+    { "id": "speaker-4", "rail": 4, "coords": { "x": 2, "y": 3, "z": 2 }, "hz": 8888 },
+    { "id": "speaker-5", "rail": 5, "coords": { "x": 2, "y": 3, "z": -2 }, "hz": 8888 }
+  ]
+}

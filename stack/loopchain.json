@@ -1,0 +1,7 @@
+[
+  { "id": "loop-1", "position": { "x": 0, "y": 0, "z": 140 }, "material": "stone", "prev": "loop-5" },
+  { "id": "loop-2", "position": { "x": 1, "y": 0, "z": 140 }, "material": "stone", "prev": "loop-1" },
+  { "id": "loop-3", "position": { "x": 2, "y": 0, "z": 140 }, "material": "stone", "prev": "loop-2" },
+  { "id": "loop-4", "position": { "x": 3, "y": 0, "z": 140 }, "material": "stone", "prev": "loop-3" },
+  { "id": "loop-5", "position": { "x": 4, "y": 0, "z": 140 }, "material": "stone", "prev": "loop-4" }
+]

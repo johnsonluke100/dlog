@@ -1,0 +1,9 @@
+{
+  "id": "diamond-lock-1",
+  "position": { "x": 1, "y": 0, "z": 4 },
+  "material": "diamond",
+  "lock": true,
+  "owner": null,
+  "security_level": "high",
+  "note": "diamond lock placeholder"
+}

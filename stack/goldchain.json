@@ -1,0 +1,8 @@
+[
+  { "id": "goldchain-1", "position": { "x": 0, "y": 0, "z": 5 }, "material": "gold", "prev": null },
+  { "id": "goldchain-2", "position": { "x": 1, "y": 0, "z": 5 }, "material": "gold", "prev": "goldchain-1" },
+  { "id": "goldchain-3", "position": { "x": 2, "y": 0, "z": 5 }, "material": "gold", "prev": "goldchain-2" },
+  { "id": "goldchain-4", "position": { "x": 3, "y": 0, "z": 5 }, "material": "gold", "prev": "goldchain-3" },
+  { "id": "goldchain-5", "position": { "x": 1, "y": 1, "z": 5 }, "material": "gold", "prev": "goldchain-4" },
+  { "id": "goldchain-6", "position": { "x": 2, "y": 1, "z": 5 }, "material": "gold", "prev": "goldchain-5" }
+]

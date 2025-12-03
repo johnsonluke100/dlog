@@ -1,0 +1,9 @@
+{
+  "mics": [
+    { "id": "mic-1", "coords": { "x": 0, "y": 4, "z": 0 }, "tracking": "paper-1", "tune": { "gain": 1.0, "hz": 8888 } },
+    { "id": "mic-2", "coords": { "x": 1, "y": 4, "z": 0 }, "tracking": "paper-2", "tune": { "gain": 0.9, "hz": 8888 } },
+    { "id": "mic-3", "coords": { "x": -1, "y": 4, "z": 0 }, "tracking": "paper-3", "tune": { "gain": 0.9, "hz": 8888 } },
+    { "id": "mic-4", "coords": { "x": 0, "y": 4, "z": 1 }, "tracking": "paper-4", "tune": { "gain": 0.8, "hz": 8888 } },
+    { "id": "mic-5", "coords": { "x": 0, "y": 4, "z": -1 }, "tracking": "paper-5", "tune": { "gain": 0.8, "hz": 8888 } }
+  ]
+}

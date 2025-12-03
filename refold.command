@@ -1,996 +1,762 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# --------------------------- Core environment -------------------------------
+ROOT="${HOME}/Desktop/dlog"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+echo "[dlog] refolding Omega workspace into ${ROOT}"
+mkdir -p "${ROOT}"
+cd "${ROOT}"
 
-: "${DLOG_ROOT:="$SCRIPT_DIR"}"
-: "${OMEGA_ROOT:="$DLOG_ROOT"}"
-: "${STACK_ROOT:="$DLOG_ROOT/stack"}"
-: "${UNIVERSE_NS:="dlog-universe"}"
-: "${KUBE_MANIFEST:="$DLOG_ROOT/kube"}"
-: "${OMEGA_INF_ROOT:="$DLOG_ROOT/∞"}"
+########################################
+# Root workspace
+########################################
 
-: "${PROJECT_ID:="dlog-gold"}"
-: "${RUN_REGION:="us-east1"}"
-: "${RUN_PLATFORM:="managed"}"
-: "${CLOUD_RUN_SERVICE:="dlog-gold-app"}"
-: "${BACKEND_SERVICE:=""}"
-: "${ARMOR_POLICY:="dlog-gold-armor"}"
+cat > Cargo.toml << 'EOF'
+[workspace]
+members = [
+    "spec",
+    "corelib",
+    "core",
+    "api",
+]
+resolver = "2"
 
-# ---------------------------------------------------------------------------
-# Paper server @ dlog.gold – DNS notes (for Luke)
-#   1) Add an A record: dlog.gold → <public IPv4 of the Minecraft/Paper host>.
-#   2) (Optional) Add an AAAA record: dlog.gold → <public IPv6>.
-#   3) If you’re not on port 25565, add an SRV:
-#        _minecraft._tcp.dlog.gold
-#        target: <the A/AAAA host>, port: <your port>, priority: 0, weight: 0.
-#   4) Keep server.properties either with server-ip blank or 0.0.0.0 and
-#      server-port matching the SRV (25565 by default).
-#   5) Open TCP on that port in firewall / router (and port-forward if home).
-#   Dynmap web map (browser): expose TCP 8123 and browse http://dlog.gold:8123/
-# ---------------------------------------------------------------------------
-
-# ------------------------------ Logging -------------------------------------
-
-timestamp() {
-  date +"%Y-%m-%d %H:%M:%S"
-}
-
-log() {
-  printf '[%s] %s\n' "$(timestamp)" "$*" >&2
-}
-
-soft_warn() {
-  printf '[%s] [warn] %s\n' "$(timestamp)" "$*" >&2
-}
-
-fatal() {
-  printf '[%s] [fatal] %s\n' "$(timestamp)" "$*" >&2
-  exit 1
-}
-
-# --------------------------- Vault / cache vortex ---------------------------
-# cache vortex = OMEGA_BANK_PASSPHRASE in RAM
-# vault        = vault/omega_vault.enc + .sha512 on disk
-
-verify_vault_integrity() {
-  local vault_dir="$DLOG_ROOT/vault"
-  local vault_file="$vault_dir/omega_vault.enc"
-  local hash_file="$vault_dir/omega_vault.enc.sha512"
-
-  if [ ! -f "$vault_file" ] || [ ! -f "$hash_file" ]; then
-    soft_warn "[vault] omega vault files missing under $vault_dir"
-    return 1
-  fi
-
-  if ! command -v shasum >/dev/null 2>&1; then
-    soft_warn "[vault] shasum not available to verify omega_vault integrity"
-    return 1
-  fi
-
-  local expected actual
-  expected="$(awk '{print $1}' "$hash_file" | tr -d '\n')"
-  actual="$(shasum -a 512 "$vault_file" | awk '{print $1}')"
-
-  if [ "$expected" = "$actual" ]; then
-    log "[vault] omega_vault.enc hash verified."
-    return 0
-  else
-    soft_warn "[vault] omega_vault.enc hash mismatch!"
-    return 1
-  fi
-}
-
-# cache vortex (RAM) → vault (encrypted snapshot)
-ensure_vault_from_cache() {
-  if [ -z "${OMEGA_BANK_PASSPHRASE-}" ]; then
-    soft_warn "[vault] cannot ensure vault: cache vortex (OMEGA_BANK_PASSPHRASE) is empty."
-    return 1
-  fi
-
-  local root="${DLOG_ROOT:-$PWD}"
-  local vault_dir="$root/vault"
-  local stack_dir="${STACK_ROOT:-$root/stack}"
-  local genesis="$vault_dir/wallet;plan.genesis"
-  local vault_file="$vault_dir/omega_vault.enc"
-  local hash_file="$vault_dir/omega_vault.enc.sha512"
-
-  mkdir -p "$vault_dir"
-
-  # 1) Ensure we have a wallet;plan genesis inside the vault
-  if [ ! -f "$genesis" ]; then
-    if [ ! -f "$stack_dir/wallet;plan" ]; then
-      soft_warn "[vault] cannot seed genesis: no $stack_dir/wallet;plan found. Run wallet stack or wand first."
-      return 1
-    fi
-    cp "$stack_dir/wallet;plan" "$genesis"
-    log "[vault] seeded wallet;plan.genesis → $genesis"
-  fi
-
-  # 2) Decide whether to (re)build encrypted vault
-  local need_rebuild=0
-  if [ ! -f "$vault_file" ] || [ ! -f "$hash_file" ]; then
-    need_rebuild=1
-  else
-    if ! verify_vault_integrity; then
-      need_rebuild=1
-    fi
-  fi
-
-  if [ "$need_rebuild" -eq 1 ]; then
-    log "[vault] (re)building omega_vault.enc from cache vortex…"
-    if ! openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt \
-      -pass env:OMEGA_BANK_PASSPHRASE \
-      -in "$genesis" \
-      -out "$vault_file"
-    then
-      soft_warn "[vault] openssl enc failed; vault not updated."
-      return 1
-    fi
-
-    if ! shasum -a 512 "$vault_file" >"$hash_file"; then
-      soft_warn "[vault] failed to write omega_vault.enc.sha512."
-      return 1
-    fi
-
-    log "[vault] omega_vault.enc + .sha512 updated from cache vortex."
-  else
-    log "[vault] existing omega_vault.enc already matches omega_vault.enc.sha512."
-  fi
-
-  # Final sanity check
-  if verify_vault_integrity; then
-    return 0
-  else
-    soft_warn "[vault] ensure_vault_from_cache: integrity still failing after rebuild."
-    return 1
-  fi
-}
-
-# vault (encrypted on disk) → wallet;plan (stack; hard drive re-remembers)
-restore_vault_to_stack() {
-  if [ -z "${OMEGA_BANK_PASSPHRASE-}" ]; then
-    soft_warn "[vault] cannot restore: cache vortex (OMEGA_BANK_PASSPHRASE) is empty."
-    return 1
-  fi
-
-  local root="${DLOG_ROOT:-$PWD}"
-  local vault_dir="$root/vault"
-  local stack_dir="${STACK_ROOT:-$root/stack}"
-  local vault_file="$vault_dir/omega_vault.enc"
-  local hash_file="$vault_dir/omega_vault.enc.sha512"
-  local out_plan="$stack_dir/wallet;plan"
-
-  if [ ! -f "$vault_file" ] || [ ! -f "$hash_file" ]; then
-    soft_warn "[vault] cannot restore: omega_vault.enc or .sha512 missing under $vault_dir"
-    return 1
-  fi
-
-  if ! verify_vault_integrity; then
-    soft_warn "[vault] cannot restore: omega_vault.enc failed hash check."
-    return 1
-  fi
-
-  mkdir -p "$stack_dir"
-
-  log "[vault] restoring wallet;plan from omega_vault.enc → $out_plan"
-
-  if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
-    -pass env:OMEGA_BANK_PASSPHRASE \
-    -in "$vault_file" \
-    -out "$out_plan"
-  then
-    soft_warn "[vault] openssl decrypt failed; check that cache vortex matches vault key."
-    return 1
-  fi
-
-  log "[vault] wallet;plan restored to $out_plan"
-  return 0
-}
-
-# --------------------------- Unlock (cache vortex) --------------------------
-
-omega_unlock() {
-  # If already set, don't overwrite (trust may have injected it)
-  if [ -n "${OMEGA_BANK_PASSPHRASE-}" ]; then
-    soft_warn "[unlock] OMEGA_BANK_PASSPHRASE already set; keeping existing value."
-    return 0
-  fi
-
-  # Pull from launchctl if available and not explicitly disabled.
-  if [ -z "${OMEGA_VORTEX_NO_LAUNCHCTL-}" ] && command -v launchctl >/dev/null 2>&1; then
-    local _cached
-    _cached="$(launchctl getenv OMEGA_BANK_PASSPHRASE 2>/dev/null || true)"
-    if [ -n "${_cached}" ]; then
-      export OMEGA_BANK_PASSPHRASE="${_cached}"
-      log "[unlock] cache vortex imported from launchctl env."
-      unset _cached
-      return 0
-    fi
-    unset _cached
-  fi
-
-  # Pull from GKE Secret Manager via kubectl if requested and not already set.
-  if [ -z "${OMEGA_VORTEX_NO_GCP-}" ] && command -v kubectl >/dev/null 2>&1; then
-    local secret_namespace="${OMEGA_VORTEX_SECRET_NS:-dlog-universe}"
-    local secret_name="${OMEGA_VORTEX_SECRET_NAME:-omega-vortex}"
-    # Try each context until one succeeds.
-    local contexts_raw="${KUBE_CONTEXTS-}"
-    if [ -z "$contexts_raw" ]; then
-      contexts_raw="$(kubectl config get-contexts -o name 2>/dev/null | tr '\n' ' ')"
-    fi
-    # shellcheck disable=SC2206
-    local contexts=(${contexts_raw//,/ })
-    for ctx in "${contexts[@]}"; do
-      if [ -z "$ctx" ]; then
-        continue
-      fi
-      if val="$(kubectl --context "$ctx" -n "$secret_namespace" get secret "$secret_name" -o jsonpath='{.data.passphrase}' 2>/dev/null)"; then
-        if decoded="$(printf '%s' "$val" | base64 --decode 2>/dev/null)"; then
-          if [ -n "$decoded" ]; then
-            export OMEGA_BANK_PASSPHRASE="$decoded"
-            log "[unlock] cache vortex imported from kubectl secret $secret_namespace/$secret_name (context=$ctx)."
-            return 0
-          fi
-        fi
-      fi
-    done
-  fi
-
-  if [ -n "${OMEGA_UNLOCK_NONINTERACTIVE-}" ]; then
-    soft_warn "[unlock] noninteractive mode and no cache vortex found; skipping prompt."
-    return 1
-  fi
-
-  # VORTEX paste screen
-  printf '\n'
-  printf '∞*!∞*!∞*!∞*!∞*!∞*!∞*!∞*!∞*!\n'
-  printf '          O M E G A   V O R T E X\n'
-  printf '              C A C H E\n'
-  printf '                 ↓\n'
-  printf '          paste the master key\n'
-  printf '          it will only live in RAM\n'
-  printf '∞*!∞*!∞*!∞*!∞*!∞*!∞*!∞*!∞*!\n'
-  printf '\n'
-  printf '  VORTEX INPUT (hidden): '
-
-  # Read without echo (paste-safe)
-  IFS= read -r -s _omega_passphrase
-  printf '\n\n'
-
-  if [ -z "${_omega_passphrase-}" ]; then
-    soft_warn "[unlock] empty passphrase; not exporting."
-    unset _omega_passphrase
-    return 1
-  fi
-
-  export OMEGA_BANK_PASSPHRASE="$_omega_passphrase"
-  unset _omega_passphrase
-
-  # Optionally seed launchctl so future wand runs (new shells) can reuse the key in RAM.
-  if [ -z "${OMEGA_VORTEX_NO_LAUNCHCTL-}" ] && command -v launchctl >/dev/null 2>&1; then
-    if ! launchctl setenv OMEGA_BANK_PASSPHRASE "${OMEGA_BANK_PASSPHRASE}" 2>/dev/null; then
-      soft_warn "[unlock] launchctl setenv failed; key kept only in this process."
-    else
-      log "[unlock] cache vortex seeded in launchctl env (RAM only)."
-    fi
-  fi
-
-  log "[unlock] cache vortex primed in OMEGA_BANK_PASSPHRASE for this spell."
-  return 0
-}
-
-# --------------------------- Core commands ----------------------------------
-
-cmd_ping() {
-  cat <<EOF
-Desktop:          $HOME/Desktop
-DLOG_ROOT:        $DLOG_ROOT
-OMEGA_ROOT:       $OMEGA_ROOT
-STACK_ROOT:       $STACK_ROOT
-UNIVERSE_NS:      $UNIVERSE_NS
-KUBE_MANIFEST:    $KUBE_MANIFEST
-Ω-INF-ROOT:       $OMEGA_INF_ROOT
-PROJECT_ID:       $PROJECT_ID
-RUN_REGION:       $RUN_REGION
-RUN_PLATFORM:     $RUN_PLATFORM
-CLOUD_RUN_SERVICE:$CLOUD_RUN_SERVICE
-BACKEND_SERVICE:  ${BACKEND_SERVICE:-<unset>}
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+axum = { version = "0.7", features = ["ws"] }
+tokio = { version = "1.37", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "1.0"
+futures = "0.3"
 EOF
-}
 
-cmd_beat() {
-  mkdir -p "$STACK_ROOT" "$OMEGA_INF_ROOT" "$DLOG_ROOT/dashboard" "$DLOG_ROOT/sky" "$KUBE_MANIFEST/universe"
-
-  local stack_file="$STACK_ROOT/stack;universe"
-  local dash_file="$DLOG_ROOT/dashboard/dashboard;status"
-  local nine_inf="$OMEGA_INF_ROOT/9∞.txt"
-
-  printf 'universe-snapshot:%s\n' "$(timestamp)" >"$stack_file"
-  log "[beat] wrote stack snapshot → $stack_file"
-
-  printf '9∞ root anchored at %s\n' "$(timestamp)" >"$nine_inf"
-  log "[beat] wrote 9∞ master root → $nine_inf"
-
-  printf 'dashboard status @ %s\n' "$(timestamp)" >"$dash_file"
-  log "[beat] wrote Ω-dashboard snapshot → $dash_file"
-
-  log "[beat] wrote Ω-sky manifest & timeline → $DLOG_ROOT/sky"
-
-  log "[beat] applying universe manifests → $KUBE_MANIFEST/universe (namespace $UNIVERSE_NS)"
-  log "[beat] complete (stack + dashboard + 9∞)."
-}
-
-cmd_flames() {
-  local hz="8888"
-  if [ "${1-}" = "hz" ] && [ -n "${2-}" ]; then
-    hz="$2"; shift 2 || true
-  fi
-
-  mkdir -p "$DLOG_ROOT/flames"
-  local control="$DLOG_ROOT/flames/flames;control"
-
-  {
-    printf 'hz=%s\n' "$hz"
-    printf 'height=7\n'
-    printf 'friction=leidenfrost\n'
-  } >"$control"
-
-  printf '[refold] wrote flames control → %s\n' "$control"
-  printf 'Flames control: hz=%s height=7 friction=leidenfrost\n' "$hz"
-  printf '(refold.command itself does not start audio — your Ω-engine must read %s)\n' "$control"
-}
-
-cmd_speaker() {
-  mkdir -p "$DLOG_ROOT/flames"
-  local profile="$DLOG_ROOT/flames/speaker;leidenfrost"
-  local hz="${1:-8888}"
-  local gain="${2:-0.05}"
-  local mode="${3:-whoosh_rail}"
-  local height="${4:-7}"
-
-  {
-    printf 'hz=%s\n' "$hz"
-    printf 'gain=%s\n' "$gain"
-    printf 'mode=%s\n' "$mode"
-    printf 'height=%s\n' "$height"
-  } >"$profile"
-
-  printf '[speaker] wrote Ω speaker profile → %s\n' "$profile"
-  printf '[speaker] tune omega_speakers against hz=%s gain=%s mode=%s height=%s\n' "$hz" "$gain" "$mode" "$height"
-}
-
-cmd_wallet_stack() {
-  mkdir -p "$STACK_ROOT"
-  local plan="$STACK_ROOT/wallet;plan"
-
-  if [ -d "$DLOG_ROOT/omega_bank" ]; then
-    log "[wallet] running omega_bank to derive Golden Wallet Stack plan…"
-    if (cd "$DLOG_ROOT/omega_bank" && cargo run --release >/tmp/omega_bank.out 2>/tmp/omega_bank.err); then
-      mkdir -p "$(dirname "$plan")"
-      mv /tmp/omega_bank.out "$plan"
-    else
-      soft_warn "[wallet] omega_bank cargo run failed; writing stub plan."
-      printf 'wallet-plan-stub @ %s\n' "$(timestamp)" >"$plan"
-    fi
-  else
-    soft_warn "[wallet] omega_bank crate not found; writing stub plan."
-    printf 'wallet-plan-stub @ %s\n' "$(timestamp)" >"$plan"
-  fi
-
-  printf '=== 🟡 GOLDEN WALLET STACK PLAN ===\n'
-  printf '[wallet] snapshot saved → %s\n' "$plan"
-}
-
-cmd_wallet() {
-  local sub="${1-stack}"; shift || true
-  case "$sub" in
-    stack) cmd_wallet_stack ;;
-    *)
-      soft_warn "[wallet] unknown subcommand: $sub"
-      return 1
-      ;;
-  esac
-}
-
-cmd_dns_router() {
-  mkdir -p "$STACK_ROOT"
-  local out="$STACK_ROOT/dns;router"
-  printf 'dns-router snapshot @ %s\n' "$(timestamp)" >"$out"
-  printf '[dns-router] snapshot → %s\n' "$out"
-}
-
-cmd_rails() {
-  mkdir -p "$STACK_ROOT"
-  local out="$STACK_ROOT/rails;omega"
-  local epoch
-  epoch="$(date +%s)"
-
-  printf '=== 🌀 refold.command rails (Ω IP bands) ===\n'
-  printf '[rails] epoch=%s railHz=8888 bands=8\n' "$epoch"
-
-  # Allow the caller to override the 8-lane bus via OMEGA_RAIL_IPS
-  # Accepts either comma- or space-separated addresses; pads/truncates to 8 lanes.
-  local ips_raw="${OMEGA_RAIL_IPS-}"
-  local ips_default="216.239.32.21 216.239.34.21 216.239.36.21 216.239.38.21 216.239.32.21 216.239.34.21 216.239.36.21 216.239.38.21"
-  local ips=()
-  if [ -n "$ips_raw" ]; then
-    # shellcheck disable=SC2206 # intentional word split after comma replacement
-    ips=(${ips_raw//,/ })
-  else
-    # shellcheck disable=SC2206 # intentional word split of default list
-    ips=($ips_default)
-  fi
-
-  # Normalize to exactly 8 entries
-  while [ "${#ips[@]}" -lt 8 ]; do
-    ips+=("<none>")
-  done
-  if [ "${#ips[@]}" -gt 8 ]; then
-    ips=("${ips[@]:0:8}")
-  fi
-
-  local bus_byte=0
-
-  {
-    printf 'epoch=%s\n' "$epoch"
-    printf 'hz=8888\n'
-    local i
-    for i in $(seq 0 7); do
-      local ip="${ips[$i]}"
-      local bit=0
-      # Treat a non-empty, non-0.0.0.0, non-<none> lane as "1"
-      if [ -n "$ip" ] && [ "$ip" != "<none>" ] && [ "$ip" != "0.0.0.0" ]; then
-        bit=1
-      fi
-      bus_byte=$((bus_byte | (bit << i)))
-
-      printf 'band%02d=%s\n' "$i" "$ip"
-      printf '[rails] band%02d → %s (bit=%d)\n' "$i" "$ip" "$bit" >&2
-      printf ';∞;rail_band;%02d;%s;%d;\n' "$i" "$ip" "$bit"
-    done
-    local bits_str=""
-    for i in 7 6 5 4 3 2 1 0; do
-      bits_str="${bits_str}$(((bus_byte >> i) & 1))"
-    done
-    printf 'bus_bits=%s\n' "$bits_str"
-    printf 'bus_hex=0x%02X\n' "$bus_byte"
-    printf 'bus_byte=%d\n' "$bus_byte"
-    printf ';∞;rail_bus;%d;bits=%s;\n' "$bus_byte" "$bits_str"
-  } >>"$out"
-
-  printf '[rails] bus → 0b%08b (%d / 0x%02X)\n' "$bus_byte" "$bus_byte" "$bus_byte" >&2
-  printf '[rails] appended snapshot → %s\n' "$out"
-}
-
-cmd_netcheck() {
-  log "[netcheck] (stub) verify Cloud DNS access for gcloud"
-}
-
-cmd_deploy() {
-  log "[deploy] (stub) build + deploy Cloud Run service for $PROJECT_ID/$CLOUD_RUN_SERVICE"
-}
-
-cmd_domains() {
-  local sub="${1-status}"; shift || true
-  case "$sub" in
-    status)
-      log "[domains] (stub) show DNS + Cloud Run domain-mapping for Ω domains"
-      ;;
-    map)
-      log "[domains] (stub) ensure domain-mappings exist (where verified)"
-      ;;
-    *)
-      soft_warn "[domains] unknown subcommand: $sub"
-      return 1
-      ;;
-  esac
-}
-
-cmd_kube_sync() {
-  local manifest_dir="$KUBE_MANIFEST/universe"
-
-  if ! command -v kubectl >/dev/null 2>&1; then
-    soft_warn "[kube-sync] kubectl not found; cannot apply manifests."
-    return 1
-  fi
-
-  if [ ! -d "$manifest_dir" ]; then
-    soft_warn "[kube-sync] manifest dir missing: $manifest_dir"
-    return 1
-  fi
-
-  # Comma- or space-separated list of contexts to fan out across rails (8 expected).
-  local contexts_raw="${KUBE_CONTEXTS-}"
-  if [ -z "$contexts_raw" ]; then
-    # Auto-discover from kubectl config, up to 8 contexts.
-    contexts_raw="$(
-      kubectl config get-contexts -o name 2>/dev/null | head -n 8 | tr '\n' ' ' | sed 's/[[:space:]]*$//'
-    )"
-    if [ -z "$contexts_raw" ]; then
-      log "[kube-sync] skipping: KUBE_CONTEXTS not set and no contexts found via kubectl config."
-      return 0
-    fi
-    log "[kube-sync] using auto-discovered contexts: $contexts_raw"
-  fi
-  # shellcheck disable=SC2206 # intentional split
-  local contexts=(${contexts_raw//,/ })
-  if [ ${#contexts[@]} -eq 0 ]; then
-    log "[kube-sync] skipping: no contexts parsed."
-    return 0
-  fi
-
-  if [ ${#contexts[@]} -lt 8 ]; then
-    soft_warn "[kube-sync] fewer than 8 contexts provided; using ${#contexts[@]} target(s)."
-  fi
-
-  local status=0
-  local idx=0
-  local successes=0
-  for ctx in "${contexts[@]}"; do
-    local ns="${UNIVERSE_NS}"
-    log "[kube-sync] applying manifests to context=$ctx ns=$ns (rail $idx)"
-
-    # Ensure namespace exists (best effort)
-    if ! kubectl --context "$ctx" get ns "$ns" >/dev/null 2>&1; then
-      if ! kubectl --context "$ctx" create ns "$ns" >/dev/null 2>&1; then
-        soft_warn "[kube-sync] namespace $ns missing and create failed for context=$ctx"
-        status=1
-        idx=$((idx + 1))
-        continue
-      fi
-    fi
-
-    if [ -f "$manifest_dir/kustomization.yaml" ] || [ -f "$manifest_dir/kustomization.yml" ]; then
-      if ! kubectl --context "$ctx" --namespace "$ns" apply -k "$manifest_dir"; then
-        soft_warn "[kube-sync] apply -k failed for context=$ctx ns=$ns"
-        status=1
-      else
-        successes=$((successes + 1))
-      fi
-    else
-      if ! kubectl --context "$ctx" --namespace "$ns" apply -R -f "$manifest_dir"; then
-        soft_warn "[kube-sync] apply -f failed for context=$ctx ns=$ns"
-        status=1
-      else
-        successes=$((successes + 1))
-      fi
-    fi
-
-    idx=$((idx + 1))
-  done
-
-  if [ "$successes" -gt 0 ]; then
-    return 0
-  fi
-  return "$status"
-}
-
-cmd_shields() {
-  local sub="${1-once}"; shift || true
-  case "$sub" in
-    once)
-      log "[shields] (stub) one-time Cloud Armor + backend attach"
-      ;;
-    watch)
-      log "[shields] (stub) continuous Ω-shield heartbeat (8s)"
-      ;;
-    *)
-      soft_warn "[shields] unknown subcommand: $sub"
-      return 1
-      ;;
-  esac
-}
-
-cmd_flow() {
-  cmd_ping
-  cmd_beat
-  cmd_flames
-  cmd_deploy
-  cmd_domains status
-  cmd_rails
-}
-
-# ------------------------------ Wand ----------------------------------------
-
-cmd_wand() {
-  local status=0
-
-  printf '=== ✨ refold.command magic wand (ping → beat → flames → speaker → wallet → dns-router → rails) ===\n'
-
-  # Auto-unlock cache vortex once so wallet/vault steps can use the key.
-  if [ -z "${OMEGA_BANK_PASSPHRASE-}" ]; then
-    soft_warn "[wand] no cache vortex detected; invoking omega_unlock…"
-    if ! omega_unlock; then
-      soft_warn "[wand] omega_unlock aborted; continuing without cache vortex."
-    fi
-  fi
-
-  cmd_ping
-  echo
-
-  cmd_beat || status=1
-  echo
-
-  cmd_flames || status=1
-  cmd_speaker || status=1
-  echo
-
-  # Wallet step always runs; if no key, still writes stub plan
-  cmd_wallet stack || status=1
-  echo
-
-  # Kube sync across all configured contexts (unless explicitly skipped)
-  if [ -n "${KUBE_SYNC_SKIP-}" ]; then
-    log "[kube-sync] skipping (KUBE_SYNC_SKIP is set)."
-  fi
-  echo
-
-  # Vault sync only if cache vortex is present (shell or agent set the key)
-  if [ -n "${OMEGA_BANK_PASSPHRASE-}" ]; then
-    if ! ensure_vault_from_cache; then
-      soft_warn "[wand] vault ensure from cache vortex failed; continuing with warnings."
-      status=1
-    fi
-  else
-    soft_warn "[wand] OMEGA_BANK_PASSPHRASE not set; skipping vault sync."
-  fi
-  echo
-
-  cmd_dns_router || status=1
-  echo
-
-  cmd_rails || status=1
-
-  if [ "$status" -ne 0 ]; then
-    printf '[wand] complete with warnings — review logs above.\n'
-  else
-    printf '[wand] complete.\n'
-  fi
-
-  return "$status"
-}
-
-# --------------------------- Usage / Dispatcher -----------------------------
-
-usage() {
-  cat <<EOF
-Usage: refold.command <subcommand> [args...]
-
-Subcommands:
-  ping                       Show Ω-environment
-  beat                       Stack + dashboard + sky + kube
-  wand                       Magic-wand chain (ping→beat→flames→speaker→wallet→dns→rails)
-  netcheck                   Verify Cloud DNS access for gcloud
-  flames [hz <value>]        Write Ω flame control (default 8888 Hz)
-  speaker [hz gain mode h]   Write Ω speaker profile (default 8888 0.05 whoosh_rail 7)
-  deploy                     Build + deploy Cloud Run service
-  domains status             Show DNS + Cloud Run domain-mapping for Ω domains
-  domains map                Ensure domain-mappings exist (where verified)
-  rails                      Sample IPs into 8 Ω-bands (8-bit bus; OMEGA_RAIL_IPS override) and log to stack
-  dns-router                 Snapshot A/AAAA inventory per Ω domain
-  kube-sync                  Apply Kubernetes manifests (system + universe)
-  shields once               One-time Cloud Armor + backend attach
-  shields watch              Continuous Ω-shield heartbeat (8s)
-  flow                       ping → beat → flames → deploy → domains → rails
-  wallet stack               Derive 256×XAUT/BTC/DOGE ids and log snapshot
-  vault verify               Check omega_vault.enc hash against .sha512
-  vault rebuild              (Re)emit omega_vault.enc + .sha512 from cache vortex
-  vault restore              Decrypt omega_vault.enc back into stack/wallet;plan
-  unlock                     Prompt once for OMEGA_BANK_PASSPHRASE (cache vortex)
+cat > .gitignore << 'EOF'
+/target
+**/*.rs.bk
+Cargo.lock
 EOF
-}
 
-# === Ω-BANK (SHA-512 || BLAKE3 "sha-1024" wallet stack) =====================
+cat > README.md << 'EOF'
+# dlog Omega workspace
 
-omega_bank_root() {
-  # default to your DLOG root
-  if [ -n "${DLOG_ROOT:-}" ]; then
-    printf '%s\n' "$DLOG_ROOT/omega_bank"
-  else
-    printf '%s\n' "$HOME/Desktop/dlog/omega_bank"
-  fi
-}
+This tree is generated by refold.command.
+Crates:
 
-omega_bank_init() {
-  local ROOT="${DLOG_ROOT:-$HOME/Desktop/dlog}"
-  local CRATE_DIR
-  CRATE_DIR="$(omega_bank_root)"
+- spec: monetary and network constants (PHI, APY, rails, block timing).
+- corelib: shared data types and serde models.
+- core: pure logic over the Omega spec.
+- api: Axum HTTP API on :8080 exposing /health, /v1/spec/*, /v1/paper/status, and /ws/paper (WebSocket bridge to a Paper host/port set via PAPER_HOST / PAPER_PORT).
 
-  echo "=== 🏦 Ω-BANK INIT ==="
-  echo "[bank] ROOT:      $ROOT"
-  echo "[bank] CRATE_DIR: $CRATE_DIR"
+One attention block is 8 seconds. Blocks per attention year are stored as an octal literal.
+EOF
 
-  mkdir -p "$ROOT"
+mkdir -p spec/src corelib/src core/src api/src
 
-  if [ ! -d "$CRATE_DIR" ]; then
-    echo "[bank] creating omega_bank crate (standalone, not in workspace)…"
-    ( cd "$ROOT" && cargo new omega_bank --bin >/dev/null 2>&1 )
-  else
-    echo "[bank] omega_bank crate already exists, refreshing sources…"
-  fi
+########################################
+# spec crate
+########################################
 
-  # Minimal Cargo.toml – SHA-512 + BLAKE3 + hex
-  cat > "$CRATE_DIR/Cargo.toml" << 'EOF'
+cat > spec/Cargo.toml << 'EOF'
 [package]
-name = "omega_bank"
+name = "dlog-spec"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-sha2 = "0.10"
-blake3 = "1"
-hex = "0.4"
+serde = { workspace = true }
 EOF
 
-  # Main Rust file: SHA-512 || BLAKE3 "ΩHASH1024" + 3 × 256 wallet IDs
-  cat > "$CRATE_DIR/src/main.rs" << 'EOF'
-use sha2::{Sha512, Digest};
-use std::env;
+cat > spec/src/lib.rs << 'EOF'
+/// Omega monetary and network spec for dlog.
+pub const PHI: f64 = 1.618_033_988_749_895;
 
-/// 1024-bit hash: SHA-512(m) || BLAKE3-512(m)
-fn omega_hash1024(input: &[u8]) -> [u8; 128] {
-    // SHA-512 half
-    let mut sha = Sha512::new();
-    sha.update(input);
-    let sha_out = sha.finalize(); // 64 bytes
+/// Holder interest APY (61.8 percent).
+pub const HOLDER_APY: f64 = 0.618;
 
-    // BLAKE3-512 half (XOF mode)
-    let mut blake_out = [0u8; 64];
-    blake3::Hasher::new()
-        .update(input)
-        .finalize_xof()
-        .fill(&mut blake_out);
+/// Miner inflation APY (8.8248 percent).
+pub const MINER_APY: f64 = 0.088_248;
 
-    // Concatenate
-    let mut out = [0u8; 128];
-    out[0..64].copy_from_slice(&sha_out);
-    out[64..128].copy_from_slice(&blake_out);
-    out
+/// Number of attention blocks per attention year, stored as an octal literal.
+///
+/// 0o16701140 octal = 3_900_000 decimal.
+pub const BLOCKS_PER_ATTENTION_YEAR: u64 = 0o16701140;
+
+/// Target duration of one attention block in seconds (octal 10 = 8).
+pub const ATTENTION_BLOCK_SECONDS: u64 = 0o10;
+
+/// Primary Infinity bank domain.
+pub const DLOG_GOLD_DOMAIN: &str = "dlog.gold";
+
+/// Rails for dlog.gold. Treat each as an Omega rail anchor in Google Cloud DNS.
+pub const DLOG_GOLD_RAIL_IPS: [&str; 8] = [
+    "34.138.180.68",
+    "104.196.206.122",
+    "34.26.186.252",
+    "104.196.42.247",
+    "35.229.25.192",
+    "34.148.54.150",
+    "34.148.48.238",
+    "35.231.190.255",
+];
+
+/// Per block holder interest factor.
+pub fn per_block_holder_factor() -> f64 {
+    PHI.powf(1.0 / BLOCKS_PER_ATTENTION_YEAR as f64)
 }
 
-/// Very simple KDF for now:
-///   root_key = SHA-512("ΩBANK" || passphrase)[0..32]
-/// For real money, upgrade this to Argon2id.
-fn derive_root_key(passphrase: &str) -> [u8; 32] {
-    let mut sha = Sha512::new();
-    sha.update(b"\xEEOmegaBankRoot");
-    sha.update(passphrase.as_bytes());
-    let out = sha.finalize();
-    let mut root = [0u8; 32];
-    root.copy_from_slice(&out[0..32]);
-    root
+/// Per block miner inflation factor.
+pub fn per_block_miner_factor() -> f64 {
+    (1.0 + MINER_APY).powf(1.0 / BLOCKS_PER_ATTENTION_YEAR as f64)
+}
+EOF
+
+########################################
+# corelib crate
+########################################
+
+cat > corelib/Cargo.toml << 'EOF'
+[package]
+name = "dlog-corelib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+EOF
+
+cat > corelib/src/lib.rs << 'EOF'
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Planet {
+    Earth,
+    Moon,
+    Mars,
+    Sun,
 }
 
-fn derive_asset_master(root_key: &[u8; 32], asset_code: u8) -> ([u8; 32], [u8; 32]) {
-    // asset_tag = "ΩASSET" || asset_code
-    let mut tag = Vec::new();
-    tag.extend_from_slice(b"\xEEOmegaAsset");
-    tag.push(asset_code);
-
-    // seed = SHA-512(root_key || tag)
-    let mut sha = Sha512::new();
-    sha.update(root_key);
-    sha.update(&tag);
-    let seed = sha.finalize(); // 64 bytes
-
-    // 1024-bit expansion
-    let hash1024 = omega_hash1024(&seed);
-
-    let mut priv_master = [0u8; 32];
-    let mut id_master   = [0u8; 32];
-
-    priv_master.copy_from_slice(&hash1024[0..32]);
-    id_master.copy_from_slice(&hash1024[32..64]);
-
-    (priv_master, id_master)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanetMovementSpec {
+    pub planet: Planet,
+    /// Omega movement exponent k used in phi.powf(k).
+    pub k: f64,
+    /// Baseline per tick multiplier for this world.
+    pub base_multiplier: f64,
+    /// Effective multiplier phi^k per tick.
+    pub tick_multiplier: f64,
 }
 
-/// Derive a single wallet (public ID only) for a given asset + index
-fn derive_wallet_id(
-    asset_priv_master: &[u8; 32],
-    asset_code: u8,
-    index: u32,
-) -> [u8; 32] {
-    let mut path_tag = Vec::new();
-    path_tag.extend_from_slice(b"\xEEWalletPath");
-    path_tag.push(asset_code);
-    path_tag.extend_from_slice(&index.to_be_bytes());
-
-    // child_seed = SHA-512(asset_priv_master || path_tag)
-    let mut sha = Sha512::new();
-    sha.update(asset_priv_master);
-    sha.update(&path_tag);
-    let child_seed = sha.finalize();
-
-    // child_hash = ΩHASH1024(child_seed)
-    let child_hash = omega_hash1024(&child_seed);
-
-    // child_id = bytes 32..64 (no private scalar output here)
-    let mut id = [0u8; 32];
-    id.copy_from_slice(&child_hash[32..64]);
-    id
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MonetarySpec {
+    pub phi: f64,
+    pub holder_apy: f64,
+    pub miner_apy: f64,
+    pub blocks_per_attention_year: u64,
+    pub attention_block_seconds: u64,
+    pub per_block_holder_factor: f64,
+    pub per_block_miner_factor: f64,
 }
 
-fn hex32(b: &[u8; 32]) -> String {
-    hex::encode(b)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotSpec {
+    pub version: String,
+    pub dlog_gold_domain: String,
+    pub dlog_gold_rails: Vec<String>,
+    pub rails_per_static_ip: u64,
 }
+EOF
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() <= 1 {
-        eprintln!("Usage: omega-bank plan");
-        eprintln!("  env OMEGA_BANK_PASSPHRASE must be set.");
-        std::process::exit(1);
+########################################
+# core crate
+########################################
+
+cat > core/Cargo.toml << 'EOF'
+[package]
+name = "dlog-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dlog-spec = { path = "../spec" }
+dlog-corelib = { path = "../corelib" }
+serde = { workspace = true }
+EOF
+
+cat > core/src/lib.rs << 'EOF'
+use dlog_spec::{
+    PHI,
+    HOLDER_APY,
+    MINER_APY,
+    BLOCKS_PER_ATTENTION_YEAR,
+    ATTENTION_BLOCK_SECONDS,
+    DLOG_GOLD_DOMAIN,
+    DLOG_GOLD_RAIL_IPS,
+    per_block_holder_factor,
+    per_block_miner_factor,
+};
+use dlog_corelib::{Planet, PlanetMovementSpec, MonetarySpec, SnapshotSpec};
+
+/// Full monetary spec, including per block factors.
+pub fn monetary_spec() -> MonetarySpec {
+    MonetarySpec {
+        phi: PHI,
+        holder_apy: HOLDER_APY,
+        miner_apy: MINER_APY,
+        blocks_per_attention_year: BLOCKS_PER_ATTENTION_YEAR,
+        attention_block_seconds: ATTENTION_BLOCK_SECONDS,
+        per_block_holder_factor: per_block_holder_factor(),
+        per_block_miner_factor: per_block_miner_factor(),
     }
+}
 
-    let cmd = &args[1];
-
-    let pass = match env::var("OMEGA_BANK_PASSPHRASE") {
-        Ok(v) => v,
-        Err(_) => {
-            eprintln!("OMEGA_BANK_PASSPHRASE not set.");
-            std::process::exit(1);
-        }
-    };
-
-    let root_key = derive_root_key(&pass);
-
-    // Asset codes: 1 = XAUT, 2 = BTC, 3 = DOGE
-    let assets = [
-        (1u8, "XAUT"),
-        (2u8, "BTC"),
-        (3u8, "DOGE"),
+/// Planet movement spec across Earth, Moon, Mars, Sun.
+pub fn planet_specs() -> Vec<PlanetMovementSpec> {
+    let base = vec![
+        (Planet::Earth, 1.0, 1.0),
+        (Planet::Moon, 0.5, 0.5),
+        (Planet::Mars, 0.8, 0.8),
+        (Planet::Sun, 1.3, 1.3),
     ];
 
-    match cmd.as_str() {
-        "plan" => {
-            println!("=== 🏦 Ω-BANK PLAN (view-only IDs) ===");
-            println!("(derived from OMEGA_BANK_PASSPHRASE via SHA-512 || BLAKE3)");
-            println!();
+    base
+        .into_iter()
+        .map(|(planet, k, base_multiplier)| PlanetMovementSpec {
+            planet,
+            k,
+            base_multiplier,
+            tick_multiplier: PHI.powf(k),
+        })
+        .collect()
+}
 
-            for (code, name) in &assets {
-                let (priv_master, id_master) = derive_asset_master(&root_key, *code);
-                println!("--- ASSET {name} (code={code}) ---");
-                println!("master_id   = {}", hex32(&id_master));
-                println!("(master_priv hidden; NEVER printed)");
-                println!();
-
-                for i in 0u32..256 {
-                    let id = derive_wallet_id(&priv_master, *code, i);
-                    println!("{name} idx={:03} id={}", i, hex32(&id));
-                }
-
-                println!();
-            }
-        }
-        other => {
-            eprintln!("Unknown command: {other}");
-            eprintln!("Usage: omega-bank plan");
-            std::process::exit(1);
-        }
+/// Snapshot of network level spec, including DNS rails.
+pub fn snapshot_spec() -> SnapshotSpec {
+    SnapshotSpec {
+        version: "0.1.0".to_string(),
+        dlog_gold_domain: DLOG_GOLD_DOMAIN.to_string(),
+        dlog_gold_rails: DLOG_GOLD_RAIL_IPS
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        // Eight Omega rails per static IP, stored as octal.
+        rails_per_static_ip: 0o10,
     }
 }
 EOF
 
-  echo "[bank] omega_bank sources written."
-  echo "[bank] building release binary…"
-  ( cd "$CRATE_DIR" && cargo build --release ) || {
-    echo "[bank] ❌ build failed"; return 1;
-  }
-  echo "[bank] ✅ omega_bank ready."
-}
+########################################
+# api crate
+########################################
 
-omega_bank_plan() {
-  local CRATE_DIR
-  CRATE_DIR="$(omega_bank_root)"
+cat > api/Cargo.toml << 'EOF'
+[package]
+name = "dlog-api"
+version = "0.1.0"
+edition = "2021"
 
-  if [ ! -x "$CRATE_DIR/target/release/omega_bank" ]; then
-    echo "[bank] omega_bank binary missing, running init…"
-    omega_bank_init || return 1
-  fi
-
-  if [ -z "${OMEGA_BANK_PASSPHRASE:-}" ]; then
-    echo "[bank] ❌ OMEGA_BANK_PASSPHRASE is not set."
-    echo "[bank]    export OMEGA_BANK_PASSPHRASE='your-strong-passphrase'"
-    return 1
-  fi
-
-  echo "=== 🏦 Ω-BANK PLAN via omega_bank (SHA-512 || BLAKE3) ==="
-  ( cd "$CRATE_DIR" && OMEGA_BANK_PASSPHRASE="$OMEGA_BANK_PASSPHRASE" ./target/release/omega_bank plan )
-}
-
-cmd_bank() {
-  local sub="${1:-help}"
-  shift || true
-  case "$sub" in
-    init)
-      omega_bank_init "$@"
-      ;;
-    plan)
-      omega_bank_plan "$@"
-      ;;
-    *)
-      cat << 'EOF'
-Usage: refold.command bank <subcommand>
-
-  bank init   - create/update ω-bank Rust crate (SHA-512 || BLAKE3)
-  bank plan   - print XAUT/BTC/DOGE × 256 wallet IDs (no priv keys)
-
-Examples:
-
-  export OMEGA_BANK_PASSPHRASE='use-a-strong-secret'
-  ~/Desktop/refold.command bank init
-  ~/Desktop/refold.command bank plan
+[dependencies]
+axum = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+futures = { workspace = true }
+dlog-core = { path = "../core" }
+dlog-corelib = { path = "../corelib" }
+dlog-spec = { path = "../spec" }
 EOF
-      ;;
-  esac
-}
-# === end Ω-BANK section ======================================================
 
+cat > api/src/main.rs << 'EOF'
+use axum::{
+    extract::State,
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+    routing::{get, post},
+    Json, Router,
+};
+use futures::{SinkExt, StreamExt};
+use serde::{Deserialize, Serialize};
+use dlog_core::{monetary_spec, planet_specs, snapshot_spec};
+use dlog_corelib::{MonetarySpec, PlanetMovementSpec, SnapshotSpec};
+use std::{net::SocketAddr, time::Duration};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpStream},
+    time::timeout,
+};
+use tracing_subscriber::EnvFilter;
 
-
-main() {
-  local cmd="${1-}"; shift || true
-  case "$cmd" in
-    ""|help|-h|--help) usage ;;
-    ping)         cmd_ping ;;
-    beat)         cmd_beat ;;
-    wand)         cmd_wand ;;
-    netcheck)     cmd_netcheck ;;
-    flames)       cmd_flames "$@" ;;
-    speaker)      cmd_speaker "$@" ;;
-    deploy)       cmd_deploy ;;
-    domains)      cmd_domains "$@" ;;
-    rails)        cmd_rails ;;
-    dns-router)   cmd_dns_router ;;
-    kube-sync)    cmd_kube_sync ;;
-    shields)      cmd_shields "$@" ;;
-    flow)         cmd_flow ;;
-    wallet)       cmd_wallet "$@" ;;
-    bank)         cmd_bank "$@" ;;
-    vault)
-      local sub="${1-verify}"; shift || true
-      case "$sub" in
-        verify)
-          verify_vault_integrity
-          ;;
-        rebuild)
-          # Auto-unlock inside this process if needed
-          if [ -z "${OMEGA_BANK_PASSPHRASE-}" ]; then
-            log "[vault] no cache vortex detected; invoking omega_unlock…"
-            if ! omega_unlock; then
-              soft_warn "[vault] unable to unlock cache vortex; aborting rebuild."
-              exit 1
-            fi
-          fi
-          ensure_vault_from_cache
-          ;;
-        restore)
-          # Auto-unlock inside this process if needed
-          if [ -z "${OMEGA_BANK_PASSPHRASE-}" ]; then
-            log "[vault] no cache vortex detected; invoking omega_unlock…"
-            if ! omega_unlock; then
-              soft_warn "[vault] unable to unlock cache vortex; aborting restore."
-              exit 1
-            fi
-          fi
-          restore_vault_to_stack
-          ;;
-        *)
-          usage
-          exit 1
-          ;;
-      esac
-      ;;
-    unlock)       omega_unlock ;;
-    *)
-      usage
-      exit 1
-      ;;
-  esac
+#[derive(Clone)]
+struct AppState {
+    paper_addr: SocketAddr,
 }
 
-main "$@"
+impl AppState {
+    fn from_env() -> Self {
+        let host = std::env::var("PAPER_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+        let port = std::env::var("PAPER_PORT")
+            .ok()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(25565);
+
+        let paper_addr = format!("{host}:{port}")
+            .parse::<SocketAddr>()
+            .expect("valid PAPER_HOST + PAPER_PORT");
+
+        Self { paper_addr }
+    }
+}
+
+#[tokio::main]
+async fn main() {
+    init_tracing();
+
+    let state = AppState::from_env();
+
+    let app = Router::new()
+        .route("/", get(root))
+        .route("/health", get(health))
+        .route("/v1/hypercube/summary", get(hypercube))
+        .route("/v1/spec/monetary", get(monetary))
+        .route("/v1/spec/planets", get(planets))
+        .route("/v1/spec/snapshot", get(snapshot))
+        .route("/v1/paper/status", get(paper_status))
+        .route("/ws/paper", get(ws_paper))
+        // Bridge for the Minecraft plugin → Rust control loop.
+        .route("/tick", post(tick))
+        .with_state(state.clone());
+
+    // Bind to PORT if set (Cloud Run), otherwise 8888 locally.
+    let addr = listen_addr();
+    tracing::info!("dlog Ω-api listening on http://{addr}");
+
+    let listener = TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
+
+fn init_tracing() {
+    let env_filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "info,hyper=warn".to_string());
+
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .with_target(false)
+        .with_line_number(true);
+
+    tracing_subscriber::registry()
+        .with(EnvFilter::new(env_filter))
+        .with(fmt_layer)
+        .init();
+}
+
+fn listen_addr() -> SocketAddr {
+    let port = std::env::var("PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok())
+        .unwrap_or(8888);
+    SocketAddr::from(([0, 0, 0, 0], port))
+}
+
+async fn root(State(state): State<AppState>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "status": "ok",
+        "phi": dlog_spec::PHI,
+        "paper_backend": state.paper_addr.to_string(),
+        "endpoints": [
+            "/health",
+            "/v1/hypercube/summary",
+            "/v1/spec/monetary",
+            "/v1/spec/planets",
+            "/v1/spec/snapshot",
+            "/v1/paper/status",
+            "/ws/paper",
+            "/tick"
+        ]
+    }))
+}
+
+async fn health() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "status": "ok",
+        "phi": dlog_spec::PHI,
+        "message": "Ω-heartbeat online"
+    }))
+}
+
+async fn monetary() -> Json<MonetarySpec> {
+    Json(MonetarySpec::default())
+}
+
+#[derive(Serialize)]
+struct PlanetsResponse {
+    planets: Vec<PlanetGravityProfile>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct PlanetGravityProfile {
+    pub key: &'static str,
+    pub surface_gravity_mps2: f64,
+    pub shell_radius_m: f64,
+    pub core_radius_m: f64,
+}
+
+const PLANET_PROFILES: &[PlanetGravityProfile] = &[
+    PlanetGravityProfile {
+        key: "sun",
+        surface_gravity_mps2: 274.0,
+        shell_radius_m: 695_700_000.0,
+        core_radius_m: 139_140_000.0,
+    },
+    PlanetGravityProfile {
+        key: "earth",
+        surface_gravity_mps2: 9.80665,
+        shell_radius_m: 6_371_000.0,
+        core_radius_m: 3_500_000.0,
+    },
+    PlanetGravityProfile {
+        key: "moon",
+        surface_gravity_mps2: 1.62,
+        shell_radius_m: 1_737_100.0,
+        core_radius_m: 1_000_000.0,
+    },
+    PlanetGravityProfile {
+        key: "mars",
+        surface_gravity_mps2: 3.711,
+        shell_radius_m: 3_389_500.0,
+        core_radius_m: 1_800_000.0,
+    },
+];
+
+async fn planets() -> Json<PlanetsResponse> {
+    Json(PlanetsResponse {
+        planets: PLANET_PROFILES.to_vec(),
+    })
+}
+
+async fn snapshot() -> Json<SnapshotSpec> {
+    Json(snapshot_spec())
+}
+
+// === Hypercube summary ===
+
+#[derive(Serialize)]
+struct HypercubeSummary {
+    title: &'static str,
+    sections: Vec<SummarySection>,
+}
+
+#[derive(Serialize)]
+struct SummarySection {
+    heading: &'static str,
+    points: &'static [&'static str],
+}
+
+async fn hypercube() -> Json<HypercubeSummary> {
+    Json(HypercubeSummary {
+        title: "DLOG / Ω-Physics / Golden Wallet / Canon Spec v3 (hypercube summary)",
+        sections: vec![
+            SummarySection {
+                heading: "Meta layers",
+                points: &[
+                    "NPC layer uses mainstream physics (seconds, meters) only when explicitly asked.",
+                    "Ω layer is default: attention-driven time, phi as the core constant, base-8 rhythms.",
+                ],
+            },
+            SummarySection {
+                heading: "Coin and identity",
+                points: &[
+                    "DLOG is for self-investment and play, not fear-based scarcity.",
+                    "Login via Apple or Google with biometrics; keys stay in device keystores; server sees signatures only.",
+                    "No seed phrases for normal flows; SMS is never the only factor for critical moves.",
+                ],
+            },
+            SummarySection {
+                heading: "Golden Wallet Stack",
+                points: &[
+                    "Backed by three golden rivers (XAUT, BTC, DOGE) spread across 256 keys each.",
+                    "Infinity Bank with Double Infinity Shield so no single actor can drain backing.",
+                    "Luke is lore-level wealthy; focus is safe sharing and play.",
+                ],
+            },
+            SummarySection {
+                heading: "Monetary policy",
+                points: &[
+                    "Holder interest ~61.8% APY; miner inflation ~8.8248% APY; combined ~70% yearly expansion.",
+                    "Per-block factors use phi curves; supply is intentionally expansive.",
+                    "Blocks track attention cycles; humans can approximate as ~8 seconds.",
+                ],
+            },
+            SummarySection {
+                heading: "VORTEX, COMET, labels",
+                points: &[
+                    "Seven VORTEX wells plus one COMET wallet form the top genesis set (88,248 wallets total).",
+                    "Labels map to phone numbers off-chain; each label is an Omega root with its own key.",
+                    "Miners pay a small tithe to fill COMET; overflow flows into VORTEX wells.",
+                ],
+            },
+            SummarySection {
+                heading: "Filesystem",
+                points: &[
+                    "Universe encoded via 9∞ master root; each block unfolds and refolds state.",
+                    "Per-label files use semicolon-delimited segments; dots are avoided in filenames and contents.",
+                ],
+            },
+            SummarySection {
+                heading: "Airdrops and gifts",
+                points: &[
+                    "88,248 genesis wallets; user airdrops decay on a phi curve.",
+                    "Anti-farm: one per phone, Apple/Google ID, and public IP; VPN/datacenter IPs blocked.",
+                    "Gifts are locked ~17 days; sending unlocks with phi-shaped limits after day 18.",
+                ],
+            },
+            SummarySection {
+                heading: "Land and game feel",
+                points: &[
+                    "Hollow planets (Earth, Moon, Mars, Sun) with shell/core inversion teleports.",
+                    "Lock tiers: iron, gold, diamond, emerald; inactivity ~256 days triggers auction.",
+                    "Movement blends Minecraft sandbox with CS:GO bhop/surf tuned by phi exponents per planet.",
+                ],
+            },
+            SummarySection {
+                heading: "Hosting and rails",
+                points: &[
+                    "Each static IP is eight Omega rails; scaling adds rails (attention lanes).",
+                    "Rust-first workspace with spec/corelib/core/api as anchors; refold.command reshapes the tree.",
+                ],
+            },
+        ],
+    })
+}
+
+// === Ω tick bridge ===
+
+#[derive(Debug, Deserialize)]
+struct TickRequest {
+    #[serde(default)]
+    entities: Vec<EntityState>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct EntityState {
+    armor_stand_id: String,
+    #[serde(default)]
+    player_id: Option<String>,
+    #[serde(default)]
+    world_id: Option<String>,
+    #[serde(default)]
+    pos: Vec3,
+    #[serde(default)]
+    vel: Vec3,
+    #[serde(default)]
+    input: InputState,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct InputState {
+    #[serde(default)]
+    forward: bool,
+    #[serde(default)]
+    back: bool,
+    #[serde(default)]
+    left: bool,
+    #[serde(default)]
+    right: bool,
+    #[serde(default)]
+    jump: bool,
+    #[serde(default)]
+    sneak: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize, Default, Clone, Copy)]
+struct Vec3 {
+    #[serde(default)]
+    x: f64,
+    #[serde(default)]
+    y: f64,
+    #[serde(default)]
+    z: f64,
+}
+
+#[derive(Debug, Serialize)]
+struct TickResponse {
+    updates: Vec<EntityUpdate>,
+}
+
+#[derive(Debug, Serialize)]
+struct EntityUpdate {
+    armor_stand_id: String,
+    pos: Vec3,
+    vel: Vec3,
+}
+
+async fn tick(headers: HeaderMap, axum::extract::Json(req): axum::extract::Json<TickRequest>) -> Result<Json<TickResponse>, StatusCode> {
+    // Optional auth: set OMEGA_TICK_TOKEN to require X-Auth-Token header.
+    if let Ok(expected) = std::env::var("OMEGA_TICK_TOKEN") {
+        let ok = headers
+            .get("x-auth-token")
+            .and_then(|v| v.to_str().ok())
+            .map(|v| v == expected)
+            .unwrap_or(false);
+        if !ok {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    }
+
+    // Simple physics step tuned for the Ω bridge. Replace with richer φ-based logic later.
+    const DT: f64 = 0.05; // 20 ticks/sec
+    const ACCEL: f64 = 0.08;
+    const JUMP_SPEED: f64 = 0.32;
+    const GRAVITY: f64 = 0.08;
+
+    let mut updates = Vec::with_capacity(req.entities.len());
+
+    for mut e in req.entities {
+        // Apply input -> velocity
+        if e.input.forward {
+            e.vel.z += ACCEL;
+        }
+        if e.input.back {
+            e.vel.z -= ACCEL;
+        }
+        if e.input.right {
+            e.vel.x += ACCEL;
+        }
+        if e.input.left {
+            e.vel.x -= ACCEL;
+        }
+        if e.input.jump {
+            // naive jump; real impl should check ground contact
+            e.vel.y = JUMP_SPEED;
+        }
+        if e.input.sneak {
+            e.vel.y -= ACCEL * 0.5;
+        }
+
+        // Gravity
+        e.vel.y -= GRAVITY * DT;
+
+        // Integrate
+        e.pos.x += e.vel.x * DT;
+        e.pos.y += e.vel.y * DT;
+        e.pos.z += e.vel.z * DT;
+
+        updates.push(EntityUpdate {
+            armor_stand_id: e.armor_stand_id,
+            pos: e.pos,
+            vel: e.vel,
+        });
+    }
+
+    Ok(Json(TickResponse { updates }))
+}
+
+// === Paper shim (HTTP/WS bridge) ===
+
+async fn paper_status(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let addr = state.paper_addr;
+    let online = timeout(Duration::from_secs(2), TcpStream::connect(addr))
+        .await
+        .ok()
+        .and_then(|res| res.ok())
+        .is_some();
+
+    Json(serde_json::json!({
+        "address": addr.to_string(),
+        "online": online,
+    }))
+}
+
+async fn ws_paper(
+    State(state): State<AppState>,
+    ws: WebSocketUpgrade,
+) -> impl IntoResponse {
+    let addr = state.paper_addr;
+    ws.on_upgrade(move |socket| handle_ws(socket, addr))
+}
+
+async fn handle_ws(socket: WebSocket, paper_addr: SocketAddr) {
+    tracing::info!("ws bridge connecting to Paper backend at {}", paper_addr);
+
+    match TcpStream::connect(paper_addr).await {
+        Ok(backend) => {
+            if let Err(err) = pipe_ws_to_tcp(socket, backend).await {
+                tracing::warn!("ws bridge error: {}", err);
+            }
+        }
+        Err(err) => {
+            tracing::warn!("failed to connect to Paper backend {}: {}", paper_addr, err);
+        }
+    }
+}
+
+async fn pipe_ws_to_tcp(
+    socket: WebSocket,
+    backend: TcpStream,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let (mut ws_tx, mut ws_rx) = socket.split();
+    let (mut tcp_reader, mut tcp_writer) = backend.into_split();
+
+    let to_tcp = async {
+        while let Some(msg) = ws_rx.next().await {
+            let msg = msg?;
+            match msg {
+                Message::Binary(bytes) => {
+                    tcp_writer.write_all(&bytes).await?;
+                }
+                Message::Text(text) => {
+                    tcp_writer.write_all(text.as_bytes()).await?;
+                    tcp_writer.write_all(b"\n").await?;
+                }
+                Message::Close(_) => break,
+                Message::Ping(_) | Message::Pong(_) => {}
+            }
+        }
+        let _ = tcp_writer.shutdown().await;
+        Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+    };
+
+    let to_ws = async {
+        let mut buf = [0u8; 4096];
+        loop {
+            let n = tcp_reader.read(&mut buf).await?;
+            if n == 0 {
+                break;
+            }
+            ws_tx.send(Message::Binary(buf[..n].to_vec())).await?;
+        }
+        let _ = ws_tx.send(Message::Close(None)).await;
+        Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+    };
+
+    tokio::select! {
+        res = to_tcp => { res?; }
+        res = to_ws => { res?; }
+    }
+
+    Ok(())
+}
+EOF
+
+########################################
+# dlog.command launcher
+########################################
+
+cat > dlog.command << 'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+export RUST_LOG="${RUST_LOG:-info,dlog_api=debug}"
+
+cargo run -p dlog-api -- "$@"
+EOF
+
+chmod +x dlog.command
+
+echo "[dlog] workspace ready at ${ROOT}"
+echo "[dlog] to run the API: cd ${ROOT} && ./dlog.command"

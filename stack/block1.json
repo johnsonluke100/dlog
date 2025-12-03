@@ -1,0 +1,6 @@
+{
+  "id": "block-1",
+  "world": "void",
+  "position": { "x": 0, "y": 0, "z": 0 },
+  "material": "barrier"
+}

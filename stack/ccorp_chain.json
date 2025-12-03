@@ -1,0 +1,8 @@
+[
+  { "id": "ccorp-1", "position": { "x": 0, "y": 0, "z": 12 }, "material": "quartz_block", "prev": null },
+  { "id": "ccorp-2", "position": { "x": 1, "y": 0, "z": 12 }, "material": "quartz_block", "prev": "ccorp-1" },
+  { "id": "ccorp-3", "position": { "x": 2, "y": 0, "z": 12 }, "material": "quartz_block", "prev": "ccorp-2" },
+  { "id": "ccorp-4", "position": { "x": 3, "y": 0, "z": 12 }, "material": "quartz_block", "prev": "ccorp-3" },
+  { "id": "ccorp-5", "position": { "x": 1, "y": 1, "z": 12 }, "material": "quartz_block", "prev": "ccorp-4" },
+  { "id": "ccorp-6", "position": { "x": 2, "y": 1, "z": 12 }, "material": "quartz_block", "prev": "ccorp-5" }
+]

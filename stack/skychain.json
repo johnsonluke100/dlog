@@ -1,0 +1,7 @@
+[
+  { "id": "sky-1", "position": { "x": 0, "y": 200, "z": 0 }, "material": "glass", "prev": null },
+  { "id": "sky-2", "position": { "x": 1, "y": 200, "z": 0 }, "material": "glass", "prev": "sky-1" },
+  { "id": "sky-3", "position": { "x": 2, "y": 200, "z": 0 }, "material": "glass", "prev": "sky-2" },
+  { "id": "sky-4", "position": { "x": 3, "y": 200, "z": 0 }, "material": "glass", "prev": "sky-3" },
+  { "id": "sky-5", "position": { "x": 4, "y": 200, "z": 0 }, "material": "glass", "prev": "sky-4" }
+]

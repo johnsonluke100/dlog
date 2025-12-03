@@ -1,0 +1,7 @@
+[
+  { "id": "diamond-1", "position": { "x": 0, "y": 0, "z": 26 }, "material": "diamond_block", "prev": null },
+  { "id": "diamond-2", "position": { "x": 1, "y": 0, "z": 26 }, "material": "diamond_block", "prev": "diamond-1" },
+  { "id": "diamond-3", "position": { "x": 2, "y": 0, "z": 26 }, "material": "diamond_block", "prev": "diamond-2" },
+  { "id": "diamond-4", "position": { "x": 3, "y": 0, "z": 26 }, "material": "diamond_block", "prev": "diamond-3" },
+  { "id": "diamond-5", "position": { "x": 4, "y": 0, "z": 26 }, "material": "diamond_block", "prev": "diamond-4" }
+]

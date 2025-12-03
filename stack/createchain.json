@@ -1,0 +1,7 @@
+[
+  { "id": "create-1", "position": { "x": 0, "y": 0, "z": 47 }, "material": "crafting_table", "prev": null },
+  { "id": "create-2", "position": { "x": 1, "y": 0, "z": 47 }, "material": "crafting_table", "prev": "create-1" },
+  { "id": "create-3", "position": { "x": 2, "y": 0, "z": 47 }, "material": "crafting_table", "prev": "create-2" },
+  { "id": "create-4", "position": { "x": 3, "y": 0, "z": 47 }, "material": "crafting_table", "prev": "create-3" },
+  { "id": "create-5", "position": { "x": 4, "y": 0, "z": 47 }, "material": "crafting_table", "prev": "create-4" }
+]

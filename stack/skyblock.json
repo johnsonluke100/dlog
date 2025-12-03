@@ -1,0 +1,8 @@
+{
+  "id": "skyblock-1",
+  "world": "sky",
+  "center": { "x": 0, "y": 100, "z": 0 },
+  "size": 5,
+  "material": "stone",
+  "note": "floating starter block in the sky"
+}

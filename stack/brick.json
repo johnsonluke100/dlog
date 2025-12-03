@@ -1,0 +1,12 @@
+{
+  "id": "brick-1",
+  "position": { "x": 0, "y": 0, "z": 0 },
+  "material": "brick",
+  "note": "single brick block"
+},
+{
+  "id": "gold-brick-1",
+  "position": { "x": 1, "y": 0, "z": 0 },
+  "material": "gold_block",
+  "note": "golden brick block"
+}

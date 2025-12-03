@@ -1,0 +1,7 @@
+[
+  { "id": "shade-1", "position": { "x": 0, "y": 0, "z": 42 }, "material": "gray_wool", "prev": null },
+  { "id": "shade-2", "position": { "x": 1, "y": 0, "z": 42 }, "material": "light_gray_wool", "prev": "shade-1" },
+  { "id": "shade-3", "position": { "x": 2, "y": 0, "z": 42 }, "material": "gray_wool", "prev": "shade-2" },
+  { "id": "shade-4", "position": { "x": 3, "y": 0, "z": 42 }, "material": "black_wool", "prev": "shade-3" },
+  { "id": "shade-5", "position": { "x": 4, "y": 0, "z": 42 }, "material": "gray_wool", "prev": "shade-4" }
+]

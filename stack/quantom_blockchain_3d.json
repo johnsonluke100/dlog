@@ -1,0 +1,7 @@
+[
+  { "id": "quantom-1", "position": { "x": 0, "y": 0, "z": 0 }, "material": "quantum", "prev": null },
+  { "id": "quantom-2", "position": { "x": 1, "y": 1, "z": 0 }, "material": "quantum", "prev": "quantom-1" },
+  { "id": "quantom-3", "position": { "x": 2, "y": 1, "z": 1 }, "material": "quantum", "prev": "quantom-2" },
+  { "id": "quantom-4", "position": { "x": 3, "y": 2, "z": 1 }, "material": "quantum", "prev": "quantom-3" },
+  { "id": "quantom-5", "position": { "x": 4, "y": 2, "z": 2 }, "material": "quantum", "prev": "quantom-4" }
+]

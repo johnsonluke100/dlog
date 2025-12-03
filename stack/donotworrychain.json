@@ -1,0 +1,8 @@
+[
+  { "id": "worry-1", "position": { "x": 0, "y": 0, "z": 11 }, "material": "stone", "note": "do not worry", "prev": null },
+  { "id": "worry-2", "position": { "x": 1, "y": 0, "z": 11 }, "material": "stone", "note": "do not worry", "prev": "worry-1" },
+  { "id": "worry-3", "position": { "x": 2, "y": 0, "z": 11 }, "material": "stone", "note": "do not worry", "prev": "worry-2" },
+  { "id": "worry-4", "position": { "x": 3, "y": 0, "z": 11 }, "material": "stone", "note": "do not worry", "prev": "worry-3" },
+  { "id": "worry-5", "position": { "x": 1, "y": 1, "z": 11 }, "material": "stone", "note": "do not worry", "prev": "worry-4" },
+  { "id": "worry-6", "position": { "x": 2, "y": 1, "z": 11 }, "material": "stone", "note": "do not worry", "prev": "worry-5" }
+]

@@ -1,0 +1,7 @@
+[
+  { "id": "mine-1", "position": { "x": 0, "y": 0, "z": 160 }, "material": "stone", "prev": null },
+  { "id": "mine-2", "position": { "x": 1, "y": 0, "z": 160 }, "material": "stone", "prev": "mine-1" },
+  { "id": "mine-3", "position": { "x": 2, "y": 0, "z": 160 }, "material": "stone", "prev": "mine-2" },
+  { "id": "mine-4", "position": { "x": 3, "y": 0, "z": 160 }, "material": "stone", "prev": "mine-3" },
+  { "id": "mine-5", "position": { "x": 4, "y": 0, "z": 160 }, "material": "stone", "prev": "mine-4" }
+]
