@@ -1,0 +1,4 @@
+Browser-only endpoint idea:
+- Keep dlog.gold mapped to Cloud Run (A: 216.239.32/34/36/38) for web/API.
+- Introduce a dedicated browser node host: web.dlog.gold (CNAME -> ghs.googlehosted.com or A -> one Cloud Run IP if needed).
+- Minecraft stays on mc.dlog.gold (8 rail IPs + SRV _minecraft._tcp.dlog.gold).

@@ -167,6 +167,197 @@ pub struct SnapshotSpec {
     pub dlog_gold_rails: Vec<String>,
     pub rails_per_static_ip: u64,
 }
+
+pub mod physics;
+EOF
+
+cat > corelib/src/physics.rs << 'EOF'
+//! Physics cannon: phi-shaped Ω integrator for 8×8 rails.
+//! - 1000 Hz tick (DT = 1 ms)
+//! - Phi-based acceleration per planet
+//! - Simple gravity and jump
+//! - Speed clamp to keep clients honest
+
+pub const PHI: f64 = 1.618_033_988_749_894_8;
+pub const BLOCKS_PER_ATTENTION_YEAR: f64 = 3_900_000.0; // stored as octal in canon
+pub const TICK_HZ: f64 = 1000.0;
+pub const DT: f64 = 1.0 / TICK_HZ;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Vec3 {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+impl Vec3 {
+    pub fn add(self, o: Self) -> Self {
+        Self {
+            x: self.x + o.x,
+            y: self.y + o.y,
+            z: self.z + o.z,
+        }
+    }
+
+    pub fn scale(self, s: f64) -> Self {
+        Self {
+            x: self.x * s,
+            y: self.y * s,
+            z: self.z * s,
+        }
+    }
+
+    pub fn length(self) -> f64 {
+        (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
+    }
+
+    pub fn normalize(self) -> Self {
+        let len = self.length();
+        if len < 1e-9 {
+            Self::default()
+        } else {
+            self.scale(1.0 / len)
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct PlanetProfile {
+    /// Phi exponent for this world (Earth ~1.0, Moon ~0.5, Mars ~0.8, Sun ~1.3).
+    pub phi_exp: f64,
+    /// Gravity magnitude (stylized; Ω-tuned).
+    pub gravity: f64,
+    /// Max horizontal speed clamp (to prevent runaway).
+    pub max_speed: f64,
+}
+
+pub fn planet_earth() -> PlanetProfile {
+    PlanetProfile {
+        phi_exp: 1.0,
+        gravity: 9.80665,
+        max_speed: 50.0,
+    }
+}
+
+pub fn planet_moon() -> PlanetProfile {
+    PlanetProfile {
+        phi_exp: 0.5,
+        gravity: 1.62,
+        max_speed: 35.0,
+    }
+}
+
+pub fn planet_mars() -> PlanetProfile {
+    PlanetProfile {
+        phi_exp: 0.8,
+        gravity: 3.71,
+        max_speed: 40.0,
+    }
+}
+
+pub fn planet_sun() -> PlanetProfile {
+    PlanetProfile {
+        phi_exp: 1.3,
+        gravity: 274.0, // stylized; tune in practice
+        max_speed: 80.0,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Input {
+    /// Desired movement direction (world space); will be normalized.
+    pub wish_dir: Vec3,
+    pub jump: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Body {
+    pub pos: Vec3,
+    pub vel: Vec3,
+    pub on_ground: bool,
+}
+
+impl Default for Body {
+    fn default() -> Self {
+        Self {
+            pos: Vec3::default(),
+            vel: Vec3::default(),
+            on_ground: true,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct TickResult {
+    pub pos: Vec3,
+    pub vel: Vec3,
+    /// Optional: energy change in this tick (for rail accounting).
+    pub energy_delta: f64,
+}
+
+/// Step one tick of Ω physics for a body.
+pub fn step(body: Body, input: Input, profile: PlanetProfile) -> TickResult {
+    let mut vel = body.vel;
+    let wish = input.wish_dir.normalize();
+
+    // Phi-based thrust magnitude per tick.
+    let accel_mag = PHI.powf(profile.phi_exp);
+    let accel = wish.scale(accel_mag);
+    vel = vel.add(accel.scale(DT));
+
+    // Gravity
+    if !body.on_ground {
+        vel.y -= profile.gravity * DT;
+    } else if input.jump {
+        // Stylized jump: sqrt(2*g*h). Use h ≈ 1.25m for flavor.
+        let jump_v = (2.0 * profile.gravity * 1.25).sqrt();
+        vel.y = jump_v;
+    }
+
+    // Horizontal clamp
+    let horiz_speed = (vel.x * vel.x + vel.z * vel.z).sqrt();
+    if horiz_speed > profile.max_speed {
+        let scale = profile.max_speed / horiz_speed;
+        vel.x *= scale;
+        vel.z *= scale;
+    }
+
+    let pos = body.pos.add(vel.scale(DT));
+
+    let old_ke = 0.5 * (body.vel.length().powi(2));
+    let new_ke = 0.5 * (vel.length().powi(2));
+    let energy_delta = new_ke - old_ke;
+
+    TickResult { pos, vel, energy_delta }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accelerates_with_phi() {
+        let body = Body::default();
+        let input = Input {
+            wish_dir: Vec3 { x: 1.0, y: 0.0, z: 0.0 },
+            jump: false,
+        };
+        let out = step(body, input, planet_earth());
+        assert!(out.vel.x > 0.0);
+        assert!(out.vel.x < planet_earth().max_speed);
+    }
+
+    #[test]
+    fn jump_adds_upward_velocity() {
+        let body = Body { on_ground: true, ..Default::default() };
+        let input = Input {
+            wish_dir: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
+            jump: true,
+        };
+        let out = step(body, input, planet_earth());
+        assert!(out.vel.y > 0.0);
+    }
+}
 EOF
 
 ########################################
@@ -282,14 +473,22 @@ use axum::{
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use dlog_core::{monetary_spec, planet_specs, snapshot_spec};
-use dlog_corelib::{MonetarySpec, PlanetMovementSpec, SnapshotSpec};
+use dlog_corelib::{MonetarySpec, SnapshotSpec};
+use dlog_corelib::physics::{
+    self as omega_phys,
+    Body as OmegaBody,
+    Input as OmegaInput,
+    PlanetProfile as OmegaPlanet,
+    Vec3 as OmegaVec3,
+    planet_earth,
+};
 use std::{net::SocketAddr, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
     time::timeout,
 };
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{EnvFilter, prelude::*};
 
 #[derive(Clone)]
 struct AppState {
@@ -387,7 +586,7 @@ async fn health() -> Json<serde_json::Value> {
 }
 
 async fn monetary() -> Json<MonetarySpec> {
-    Json(MonetarySpec::default())
+    Json(monetary_spec())
 }
 
 #[derive(Serialize)]
@@ -569,6 +768,8 @@ struct InputState {
     jump: bool,
     #[serde(default)]
     sneak: bool,
+    #[serde(default)]
+    on_ground: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Default, Clone, Copy)]
@@ -606,52 +807,50 @@ async fn tick(headers: HeaderMap, axum::extract::Json(req): axum::extract::Json<
         }
     }
 
-    // Simple physics step tuned for the Ω bridge. Replace with richer φ-based logic later.
-    const DT: f64 = 0.05; // 20 ticks/sec
-    const ACCEL: f64 = 0.08;
-    const JUMP_SPEED: f64 = 0.32;
-    const GRAVITY: f64 = 0.08;
-
+    // Ω physics cannon: integrate using phi-shaped movement and gravity.
+    // Incoming ticks are ~20 Hz; we substep at 1 kHz to keep integration stable.
+    const TICK_DT: f64 = 0.05; // 50 ms per incoming tick
+    let substeps = (TICK_DT / omega_phys::DT).round().max(1.0) as usize;
+    let planet: OmegaPlanet = planet_earth();
     let mut updates = Vec::with_capacity(req.entities.len());
 
     for mut e in req.entities {
-        // Apply input -> velocity
-        if e.input.forward {
-            e.vel.z += ACCEL;
-        }
-        if e.input.back {
-            e.vel.z -= ACCEL;
-        }
-        if e.input.right {
-            e.vel.x += ACCEL;
-        }
-        if e.input.left {
-            e.vel.x -= ACCEL;
-        }
-        if e.input.jump {
-            // naive jump; real impl should check ground contact
-            e.vel.y = JUMP_SPEED;
-        }
-        if e.input.sneak {
-            e.vel.y -= ACCEL * 0.5;
-        }
+        let wish = OmegaVec3 {
+            x: dir_input(e.input.right as i32 - e.input.left as i32),
+            y: 0.0,
+            z: dir_input(e.input.forward as i32 - e.input.back as i32),
+        };
+        let mut body = OmegaBody {
+            pos: OmegaVec3 { x: e.pos.x, y: e.pos.y, z: e.pos.z },
+            vel: OmegaVec3 { x: e.vel.x, y: e.vel.y, z: e.vel.z },
+            on_ground: e.input.on_ground.unwrap_or(true),
+        };
+        let omega_in = OmegaInput { wish_dir: wish, jump: e.input.jump };
 
-        // Gravity
-        e.vel.y -= GRAVITY * DT;
-
-        // Integrate
-        e.pos.x += e.vel.x * DT;
-        e.pos.y += e.vel.y * DT;
-        e.pos.z += e.vel.z * DT;
+        for _ in 0..substeps {
+            let out = omega_phys::step(body, omega_in, planet);
+            body.pos = out.pos;
+            body.vel = out.vel;
+            // simple ground latch: if y <= 0, clamp to ground and zero vertical velocity
+            if body.pos.y <= 0.0 {
+                body.pos.y = 0.0;
+                body.vel.y = 0.0;
+                body.on_ground = true;
+            }
+        }
 
         updates.push(EntityUpdate {
             armor_stand_id: e.armor_stand_id,
-            pos: e.pos,
-            vel: e.vel,
+            pos: Vec3 { x: body.pos.x, y: body.pos.y, z: body.pos.z },
+            vel: Vec3 { x: body.vel.x, y: body.vel.y, z: body.vel.z },
         });
     }
 
     Ok(Json(TickResponse { updates }))
+}
+
+fn dir_input(n: i32) -> f64 {
+    if n > 0 { 1.0 } else if n < 0 { -1.0 } else { 0.0 }
 }
 
 // === Paper shim (HTTP/WS bridge) ===

@@ -1,3 +1,7 @@
 hz=8888
+gain=0.0024
 height=7
 friction=leidenfrost
+mode=whoosh_rail
+whoosh_min_hz=333
+whoosh_max_hz=999
