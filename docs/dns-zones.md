@@ -31,16 +31,68 @@ gcloud dns managed-zones create reverse-10-0-zone \
 ```
 
 ## Public records (example, TTL 30s)
-Replace `X.X.X.X` with your IP (e.g., load balancer).
+For `dlog-gold-public` (DNSSEC on, logging off). Replace with the correct zone name if needed.
 ```bash
-gcloud dns record-sets transaction start --zone=dlog-gold-zone
-gcloud dns record-sets transaction add X.X.X.X \
-  --name=api.dlog.gold. --ttl=30 --type=A --zone=dlog-gold-zone
-gcloud dns record-sets transaction add X.X.X.X \
-  --name=engine.dlog.gold. --ttl=30 --type=A --zone=dlog-gold-zone
-gcloud dns record-sets transaction add X.X.X.X \
-  --name=airdrop.dlog.gold. --ttl=30 --type=A --zone=dlog-gold-zone
-gcloud dns record-sets transaction execute --zone=dlog-gold-zone
+ZONE=dlog-gold-public
+
+# Ensure zone exists
+gcloud dns managed-zones create "$ZONE" \
+  --dns-name=dlog.gold. \
+  --visibility=public \
+  --dnssec-state=on \
+  --description="Public zone for dlog.gold" \
+  --labels=env=prod
+
+gcloud dns record-sets transaction start --zone="$ZONE"
+
+# SOA/NS (usually managed automatically; included here for completeness)
+gcloud dns record-sets transaction add \
+  "ns-cloud-b1.googledomains.com. cloud-dns-hostmaster.google.com. 6 21600 3600 259200 300" \
+  --name=dlog.gold. --ttl=1 --type=SOA --zone="$ZONE"
+
+gcloud dns record-sets transaction add \
+  "ns-cloud-b1.googledomains.com." \
+  "ns-cloud-b2.googledomains.com." \
+  "ns-cloud-b3.googledomains.com." \
+  "ns-cloud-b4.googledomains.com." \
+  --name=dlog.gold. --ttl=8 --type=NS --zone="$ZONE"
+
+# Apex A
+gcloud dns record-sets transaction add 34.26.6.76 \
+  --name=dlog.gold. --ttl=1 --type=A --zone="$ZONE"
+
+# Verification TXT
+gcloud dns record-sets transaction add "google-site-verification=EXrS59hSKlZcxQTrJO6jJVV1Aey_W2r0TKgIgtoRbeg" \
+  --name=dlog.gold. --ttl=8 --type=TXT --zone="$ZONE"
+
+# Minecraft SRV
+gcloud dns record-sets transaction add "0 5 25565 mc.dlog.gold." \
+  --name=_minecraft._tcp.dlog.gold. --ttl=1 --type=SRV --zone="$ZONE"
+
+# CNAME for API
+gcloud dns record-sets transaction add ghs.googlehosted.com. \
+  --name=api.dlog.gold. --ttl=1 --type=CNAME --zone="$ZONE"
+
+# MC A records (8 rails)
+gcloud dns record-sets transaction add \
+  34.138.180.68 \
+  104.196.206.122 \
+  34.26.186.252 \
+  104.196.42.247 \
+  35.229.25.192 \
+  34.148.54.150 \
+  34.148.48.238 \
+  35.231.190.255 \
+  --name=mc.dlog.gold. --ttl=1 --type=A --zone="$ZONE"
+
+# Extra A records
+gcloud dns record-sets transaction add 216.239.38.21 \
+  --name=first.dlog.gold. --ttl=8 --type=A --zone="$ZONE"
+
+gcloud dns record-sets transaction add 216.239.32.21 \
+  --name=fifth.dlog.gold. --ttl=1 --type=A --zone="$ZONE"
+
+gcloud dns record-sets transaction execute --zone="$ZONE"
 ```
 
 ## Internal records (example, TTL 1s)
