@@ -32,7 +32,7 @@ spec:
             - name: LEVEL_TYPE
               value: "FLAT"
             - name: GENERATOR_SETTINGS
-              value: "minecraft:bedrock,1*minecraft:barrier;1"
+              value: "3;minecraft:air;1;"
             - name: GENERATE_STRUCTURES
               value: "false"
             - name: ALLOW_NETHER

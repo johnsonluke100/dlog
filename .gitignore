@@ -16,3 +16,15 @@ logs/
 
 # Docker
 data/
+
+# Local gcloud state
+.gcloud/
+.gcloud-tmp/
+.gcloud-cli/
+
+# Paper plugin builds
+paper-void-plugin/target/
+paper-sim-plugin/target/
+
+# Local env helpers
+.env/

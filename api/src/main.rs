@@ -8,8 +8,16 @@ use axum::{
 };
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use spec::{MonetarySpec, PlanetGravityProfile, PLANET_PROFILES, PHI};
-use std::{net::SocketAddr, time::Duration};
+use spec::{
+    Anchor, Barrier, InputState, MonetarySpec, PlanetGravityProfile, Pose, RenderEntity, SimTickRequest,
+    SimTickResponse, SimView, UiOverlay, Vec3, PLANET_PROFILES, PHI,
+};
+use std::{
+    net::SocketAddr,
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -20,6 +28,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 #[derive(Clone)]
 struct AppState {
     paper_addr: SocketAddr,
+    sim_state_path: Arc<PathBuf>,
 }
 
 impl AppState {
@@ -34,7 +43,14 @@ impl AppState {
             .parse::<SocketAddr>()
             .expect("valid PAPER_HOST + PAPER_PORT");
 
-        Self { paper_addr }
+        let sim_state_path = std::env::var("SIM_STATE_PATH")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/tmp/omega-sim-state.json"));
+
+        Self {
+            paper_addr,
+            sim_state_path: Arc::new(sim_state_path),
+        }
     }
 }
 
@@ -52,6 +68,7 @@ async fn main() {
         .route("/v1/spec/planets", get(planets))
         .route("/v1/paper/status", get(paper_status))
         .route("/ws/paper", get(ws_paper))
+        .route("/v1/sim/tick", post(sim_tick))
         // Bridge for the Minecraft plugin → Rust control loop.
         .route("/tick", post(tick))
         .with_state(state.clone());
@@ -89,6 +106,7 @@ async fn root(State(state): State<AppState>) -> Json<serde_json::Value> {
             "/v1/spec/monetary",
             "/v1/spec/planets",
             "/v1/paper/status",
+            "/v1/sim/tick",
             "/ws/paper",
             "/tick"
         ]
@@ -242,32 +260,6 @@ struct EntityState {
     input: InputState,
 }
 
-#[derive(Debug, Deserialize, Default)]
-struct InputState {
-    #[serde(default)]
-    forward: bool,
-    #[serde(default)]
-    back: bool,
-    #[serde(default)]
-    left: bool,
-    #[serde(default)]
-    right: bool,
-    #[serde(default)]
-    jump: bool,
-    #[serde(default)]
-    sneak: bool,
-}
-
-#[derive(Debug, Deserialize, Serialize, Default, Clone, Copy)]
-struct Vec3 {
-    #[serde(default)]
-    x: f64,
-    #[serde(default)]
-    y: f64,
-    #[serde(default)]
-    z: f64,
-}
-
 #[derive(Debug, Serialize)]
 struct TickResponse {
     updates: Vec<EntityUpdate>,
@@ -339,6 +331,139 @@ async fn tick(headers: HeaderMap, axum::extract::Json(req): axum::extract::Json<
     }
 
     Ok(Json(TickResponse { updates }))
+}
+
+// === Ω sim tick (Cloud Run + GCS bucket state) ===
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SimState {
+    tick: u64,
+    players: Vec<PlayerSnapshot>,
+}
+
+impl Default for SimState {
+    fn default() -> Self {
+        Self {
+            tick: 0,
+            players: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PlayerSnapshot {
+    player_id: String,
+    pose: Pose,
+    last_inputs: InputState,
+}
+
+async fn sim_tick(
+    State(state): State<AppState>,
+    Json(req): Json<SimTickRequest>,
+) -> Result<Json<SimTickResponse>, StatusCode> {
+    let mut sim = read_sim_state(&state.sim_state_path)
+        .await
+        .map_err(|err| {
+            tracing::warn!("[sim] failed to read state: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    sim.tick = sim.tick.wrapping_add(1);
+    upsert_player(&mut sim, &req);
+
+    write_sim_state(&state.sim_state_path, &sim)
+        .await
+        .map_err(|err| {
+            tracing::warn!("[sim] failed to write state: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let view = build_view(&sim, &req);
+    let server_time_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+
+    Ok(Json(SimTickResponse {
+        tick: sim.tick,
+        state_version: format!("tick-{}", sim.tick),
+        server_time_ms,
+        view,
+    }))
+}
+
+fn upsert_player(sim: &mut SimState, req: &SimTickRequest) {
+    if let Some(existing) = sim
+        .players
+        .iter_mut()
+        .find(|p| p.player_id == req.player_id)
+    {
+        existing.pose = req.pose;
+        existing.last_inputs = req.inputs.clone();
+        return;
+    }
+
+    sim.players.push(PlayerSnapshot {
+        player_id: req.player_id.clone(),
+        pose: req.pose,
+        last_inputs: req.inputs.clone(),
+    });
+}
+
+fn build_view(sim: &SimState, req: &SimTickRequest) -> SimView {
+    let mut view = SimView::default();
+
+    view.anchors.push(Anchor {
+        id: "omega-root".to_string(),
+        kind: "origin".to_string(),
+        pos: Vec3 { x: 0.0, y: 64.0, z: 0.0 },
+    });
+
+    for player in &sim.players {
+        view.entities.push(RenderEntity {
+            id: format!("player-{}", player.player_id),
+            kind: "player-shadow".to_string(),
+            pos: player.pose.pos,
+            yaw: player.pose.yaw,
+            pitch: player.pose.pitch,
+        });
+    }
+
+    // Minimal barrier hint at spawn platform; clients can render a 3x3 pad.
+    view.barriers.push(Barrier {
+        min: Vec3 { x: -1.0, y: 64.0, z: -1.0 },
+        max: Vec3 { x: 1.0, y: 64.0, z: 1.0 },
+    });
+
+    view.ui = UiOverlay {
+        title: "Ω void terminal".to_string(),
+        hotbar: vec![
+            "You are in the shared Ω simulation".to_string(),
+            format!("Tick {}", sim.tick),
+            format!("You reported: ({:.2},{:.2},{:.2})", req.pose.pos.x, req.pose.pos.y, req.pose.pos.z),
+        ],
+    };
+
+    view
+}
+
+async fn read_sim_state(path: &PathBuf) -> Result<SimState, std::io::Error> {
+    match tokio::fs::read(path).await {
+        Ok(bytes) => {
+            let parsed = serde_json::from_slice::<SimState>(&bytes).unwrap_or_default();
+            Ok(parsed)
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(SimState::default()),
+        Err(err) => Err(err),
+    }
+}
+
+async fn write_sim_state(path: &PathBuf, sim: &SimState) -> Result<(), std::io::Error> {
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    let data = serde_json::to_vec_pretty(sim).unwrap();
+    tokio::fs::write(path, data).await
 }
 
 // === Paper shim (HTTP/WS bridge) ===
@@ -425,4 +550,57 @@ async fn pipe_ws_to_tcp(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::Json;
+    use std::net::Ipv4Addr;
+    use tempfile::tempdir;
+
+    fn test_state(path: PathBuf) -> AppState {
+        AppState {
+            paper_addr: SocketAddr::from((Ipv4Addr::LOCALHOST, 25565)),
+            sim_state_path: Arc::new(path),
+        }
+    }
+
+    #[tokio::test]
+    async fn sim_tick_persists_and_builds_view() {
+        let dir = tempdir().unwrap();
+        let state_path = dir.path().join("sim.json");
+        let state = test_state(state_path.clone());
+
+        let req = SimTickRequest {
+            player_id: "player-1".to_string(),
+            pose: Pose {
+                pos: Vec3 { x: 1.0, y: 64.0, z: 2.0 },
+                yaw: 90.0,
+                pitch: 0.0,
+            },
+            ..Default::default()
+        };
+
+        let resp = sim_tick(State(state.clone()), Json(req.clone()))
+            .await
+            .expect("ok");
+        let body: SimTickResponse = resp.0;
+        assert_eq!(body.tick, 1);
+        assert_eq!(body.view.entities.len(), 1);
+        assert_eq!(body.view.entities[0].pos.x, 1.0);
+
+        // Second tick should increment and persist state on disk.
+        let resp2 = sim_tick(State(state.clone()), Json(req))
+            .await
+            .expect("ok");
+        let body2: SimTickResponse = resp2.0;
+        assert_eq!(body2.tick, 2);
+
+        // Verify persisted file reflects tick 2.
+        let disk_bytes = tokio::fs::read(state_path).await.unwrap();
+        let disk_state: SimState = serde_json::from_slice(&disk_bytes).unwrap();
+        assert_eq!(disk_state.tick, 2);
+        assert_eq!(disk_state.players.len(), 1);
+    }
 }

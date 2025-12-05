@@ -1,0 +1,9 @@
+name: VoidTerminal
+main: com.dlog.omega.VoidTerminalPlugin
+version: 0.1.0
+description: Void world helper for Paper 1.8.8 (spawn pad + /recenter)
+load: STARTUP
+commands:
+  recenter:
+    description: Rebuild the void spawn pad and teleport you there.
+    usage: /recenter

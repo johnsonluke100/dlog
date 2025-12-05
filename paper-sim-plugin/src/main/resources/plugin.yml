@@ -1,0 +1,9 @@
+name: OmegaSimClient
+main: com.dlog.omega.OmegaSimClientPlugin
+version: 0.1.0
+description: Omega sim client for Paper 1.8.8 (void terminal renderer)
+load: POSTWORLD
+commands:
+  simtick:
+    description: Trigger a single sim tick for your player.
+    usage: /simtick

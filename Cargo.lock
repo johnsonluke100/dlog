@@ -99,6 +99,7 @@ dependencies = [
  "serde",
  "serde_json",
  "spec",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",

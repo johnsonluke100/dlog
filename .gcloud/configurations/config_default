@@ -1,8 +1,0 @@
-[core]
-account = johnsonluke100@gmail.com
-project = dlog-gold
-
-[compute]
-zone = us-east4-a
-region = us-east4
-

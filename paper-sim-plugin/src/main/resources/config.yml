@@ -1,0 +1,3 @@
+api_base: "http://localhost:8888"
+auth_token: ""
+tick_interval_ticks: 10

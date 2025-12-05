@@ -121,3 +121,102 @@ impl SkyShowConfig {
         SkyShowConfig { slides }
     }
 }
+
+//
+// Ω simulation API (shared tick/view contract)
+//
+
+/// 3D vector used for positions and velocities.
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize, Default)]
+pub struct Vec3 {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+/// Player pose reported by the client.
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize, Default)]
+pub struct Pose {
+    pub pos: Vec3,
+    pub yaw: f32,
+    pub pitch: f32,
+}
+
+/// Raw input flags from the client.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
+pub struct InputState {
+    pub forward: bool,
+    pub back: bool,
+    pub left: bool,
+    pub right: bool,
+    pub jump: bool,
+    pub sneak: bool,
+}
+
+/// Request from Paper client to the Ω sim endpoint.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
+pub struct SimTickRequest {
+    pub player_id: String,
+    #[serde(default)]
+    pub pose: Pose,
+    #[serde(default)]
+    pub inputs: InputState,
+    #[serde(default)]
+    pub client_time_ms: Option<u64>,
+}
+
+/// One logical render anchor (e.g., origin, planets).
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct Anchor {
+    pub id: String,
+    pub kind: String,
+    pub pos: Vec3,
+}
+
+/// Entity to render (armor stand, particle anchor, etc).
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct RenderEntity {
+    pub id: String,
+    pub kind: String,
+    pub pos: Vec3,
+    pub yaw: f32,
+    pub pitch: f32,
+}
+
+/// Barrier/collision hint for the client.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
+pub struct Barrier {
+    pub min: Vec3,
+    pub max: Vec3,
+}
+
+/// UI overlay hints (hotbar/action bar, titles).
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
+pub struct UiOverlay {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub hotbar: Vec<String>,
+}
+
+/// View slice returned to the client.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
+pub struct SimView {
+    #[serde(default)]
+    pub anchors: Vec<Anchor>,
+    #[serde(default)]
+    pub entities: Vec<RenderEntity>,
+    #[serde(default)]
+    pub barriers: Vec<Barrier>,
+    #[serde(default)]
+    pub ui: UiOverlay,
+}
+
+/// Response from the Ω sim endpoint.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct SimTickResponse {
+    pub tick: u64,
+    pub state_version: String,
+    pub server_time_ms: u64,
+    pub view: SimView,
+}
