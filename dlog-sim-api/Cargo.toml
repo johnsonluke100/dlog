@@ -1,0 +1,18 @@
+[package]
+name = "dlog-sim-api"
+version = "0.1.0"
+edition = "2021"
+description = "Minimal Ω sim tick API backed by GCS"
+
+[dependencies]
+anyhow = "1.0"
+axum = { version = "0.7", features = ["json"] }
+google-cloud-auth = "0.13"
+google-cloud-storage = "0.18"
+hyper = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }

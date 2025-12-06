@@ -3,6 +3,7 @@ members = [
     "omega_speakers",
     "dlog_gold_http",
     "dlog_http4_client",
+    "dlog-sim-api",
     "corelib",
     "spec",
     "presence_service",
