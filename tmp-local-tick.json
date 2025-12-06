@@ -1,0 +1,7 @@
+{
+  "player_uuid": "local-test",
+  "local_tick": 1,
+  "position": { "x": 0.0, "y": 64.0, "z": 0.0, "yaw": 0.0, "pitch": 0.0 },
+  "inputs": [],
+  "block_updates": []
+}

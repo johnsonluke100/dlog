@@ -4,6 +4,7 @@ use google_cloud_storage::http::objects::download::Range;
 use google_cloud_storage::http::objects::get::GetObjectRequest;
 use google_cloud_storage::http::objects::upload::{Media, UploadObjectRequest, UploadType};
 use google_cloud_storage::http::Error as GcsError;
+use hyper::http::StatusCode;
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
 
@@ -50,6 +51,9 @@ impl OmegaStorage {
         {
             Ok(data) => data,
             Err(GcsError::Response(err)) if err.code == 404 => return Ok(None),
+            Err(GcsError::HttpClient(err)) if err.status() == Some(StatusCode::NOT_FOUND) => {
+                return Ok(None)
+            }
             Err(e) => return Err(e.into()),
         };
 

@@ -1,0 +1,5 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "Dockerfile.sim", "-t", "gcr.io/dlog-gold/dlog-sim-api:latest", "."]
+images:
+  - "gcr.io/dlog-gold/dlog-sim-api:latest"

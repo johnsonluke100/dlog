@@ -1,9 +1,3 @@
-# Files and directories to skip when uploading to Cloud Build
-.git
-.gitignore
-.dockerignore
-.DS_Store
-
 # Build outputs
 target
 **/target
@@ -15,6 +9,11 @@ stack
 flames
 dashboard
 ∞
+
+# IDE / VCS
+.git
+.gitignore
+.DS_Store
 
 # Node / front caches
 node_modules
