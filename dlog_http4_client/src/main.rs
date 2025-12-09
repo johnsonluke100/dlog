@@ -1,8 +1,62 @@
+use clap::{Parser, Subcommand};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::info;
 use uuid::Uuid;
+
+#[derive(Parser, Debug)]
+#[command(
+    name = "dlog_http4_client",
+    about = "Probe the DLOG HTTP-4 gateway and bank routes",
+    disable_help_subcommand = true
+)]
+struct Args {
+    /// Target HTTP-4 endpoint (default: http://127.0.0.1:8080 or $OMEGA_EDGE)
+    #[arg(long, env = "OMEGA_EDGE", default_value = "http://127.0.0.1:8080")]
+    endpoint: String,
+
+    /// Phone number to authenticate with (default: $DLOG_PHONE or 9132077554)
+    #[arg(long, env = "DLOG_PHONE", default_value = "9132077554")]
+    phone: String,
+
+    /// Label for the client identity (default: $DLOG_LABEL or comet)
+    #[arg(long, env = "DLOG_LABEL", default_value = "comet")]
+    label: String,
+
+    /// Display name used during signup (default: $DLOG_DISPLAY or Ω Remote)
+    #[arg(long, env = "DLOG_DISPLAY", default_value = "Ω Remote")]
+    display_name: String,
+
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum Command {
+    /// Perform the full login → handshake → bank probe flow
+    Probe {
+        /// Destination label for the transfer probe
+        #[arg(long, default_value = "fun")]
+        to_label: String,
+
+        /// Amount (in the smallest unit) to move during the transfer probe
+        #[arg(long, default_value_t = 50_000)]
+        amount: u64,
+    },
+
+    /// Fetch gateway status without performing auth flows
+    Status,
+}
+
+impl Default for Command {
+    fn default() -> Self {
+        Command::Probe {
+            to_label: "fun".into(),
+            amount: 50_000,
+        }
+    }
+}
 
 #[derive(Debug, Serialize)]
 struct HandshakeRequest {
@@ -115,63 +169,84 @@ async fn main() -> anyhow::Result<()> {
         .with_level(true)
         .init();
 
-    let endpoint =
-        std::env::var("OMEGA_EDGE").unwrap_or_else(|_| "http://127.0.0.1:8080".to_string());
+    let args = Args::parse();
+    let endpoint = args.endpoint.clone();
     let client = Client::builder().timeout(Duration::from_secs(5)).build()?;
 
-    let client_identity = login_via_phone(&client, &endpoint).await?;
-    info!(
-        "Ω client targeting {} as {} ({}) display:{} token:{}",
-        endpoint,
-        client_identity.phone,
-        client_identity.label,
-        client_identity.display_name,
-        client_identity.session_token
-    );
+    match args.command.unwrap_or_default() {
+        Command::Probe { to_label, amount } => {
+            let client_identity = login_via_phone(
+                &client,
+                &endpoint,
+                &args.phone,
+                &args.label,
+                &args.display_name,
+            )
+            .await?;
+            info!(
+                "Ω client targeting {} as {} ({}) display:{} token:{}",
+                endpoint,
+                client_identity.phone,
+                client_identity.label,
+                client_identity.display_name,
+                client_identity.session_token
+            );
 
-    pull_signup_frames(&client, &endpoint).await?;
+            pull_signup_frames(&client, &endpoint).await?;
 
-    let handshake_resp = handshake(&client, &endpoint, &client_identity).await?;
-    if let Some(identity) = &handshake_resp.identity {
-        info!(
-            "Handshake acknowledged presence {} [{}]",
-            identity.phone, identity.presence_state
-        );
+            let handshake_resp = handshake(&client, &endpoint, &client_identity).await?;
+            if let Some(identity) = &handshake_resp.identity {
+                info!(
+                    "Handshake acknowledged presence {} [{}]",
+                    identity.phone, identity.presence_state
+                );
+            }
+            info!("Handshake motd: {}", handshake_resp.motd);
+
+            balance_probe(
+                &client,
+                &endpoint,
+                &handshake_resp.session_id,
+                &omega_label(&client_identity.phone, &client_identity.label),
+            )
+            .await?;
+            transfer_probe(
+                &client,
+                &endpoint,
+                &handshake_resp.session_id,
+                &omega_label(&client_identity.phone, &client_identity.label),
+                &omega_label(&client_identity.phone, &to_label),
+                amount,
+            )
+            .await?;
+            balance_probe(
+                &client,
+                &endpoint,
+                &handshake_resp.session_id,
+                &omega_label(&client_identity.phone, &to_label),
+            )
+            .await?;
+
+            let status = client
+                .get(format!("{endpoint}/omega/status"))
+                .send()
+                .await?
+                .error_for_status()?
+                .text()
+                .await?;
+            info!("Gateway status: {}", status);
+        }
+        Command::Status => {
+            let status = client
+                .get(format!("{endpoint}/omega/status"))
+                .send()
+                .await?
+                .error_for_status()?
+                .text()
+                .await?;
+            info!("Gateway status: {}", status);
+        }
     }
-    info!("Handshake motd: {}", handshake_resp.motd);
-
-    balance_probe(
-        &client,
-        &endpoint,
-        &handshake_resp.session_id,
-        &omega_label(&client_identity.phone, &client_identity.label),
-    )
-    .await?;
-    transfer_probe(
-        &client,
-        &endpoint,
-        &handshake_resp.session_id,
-        &omega_label(&client_identity.phone, &client_identity.label),
-        &omega_label(&client_identity.phone, "fun"),
-        50_000,
-    )
-    .await?;
-    balance_probe(
-        &client,
-        &endpoint,
-        &handshake_resp.session_id,
-        &omega_label(&client_identity.phone, "fun"),
-    )
-    .await?;
-
-    let status = client
-        .get(format!("{endpoint}/omega/status"))
-        .send()
-        .await?
-        .error_for_status()?
-        .text()
-        .await?;
-    info!("Gateway status: {}", status);
 
     Ok(())
 }
@@ -316,18 +391,20 @@ async fn confirm_phone_session(
     }
 }
 
-async fn login_via_phone(client: &Client, endpoint: &str) -> anyhow::Result<ClientIdentity> {
-    let phone = std::env::var("DLOG_PHONE").unwrap_or_else(|_| "9132077554".into());
-    let label = std::env::var("DLOG_LABEL").unwrap_or_else(|_| "comet".into());
-    let display_name = std::env::var("DLOG_DISPLAY").unwrap_or_else(|_| "Ω Remote".into());
-
-    let session_token = start_phone_session(client, endpoint, &phone, &label, &display_name).await?;
+async fn login_via_phone(
+    client: &Client,
+    endpoint: &str,
+    phone: &str,
+    label: &str,
+    display_name: &str,
+) -> anyhow::Result<ClientIdentity> {
+    let session_token = start_phone_session(client, endpoint, phone, label, display_name).await?;
     confirm_phone_session(client, endpoint, &session_token).await?;
 
     Ok(ClientIdentity {
-        phone,
-        label,
-        display_name,
+        phone: phone.to_string(),
+        label: label.to_string(),
+        display_name: display_name.to_string(),
         session_token,
     })
 }

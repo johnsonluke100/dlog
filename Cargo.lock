@@ -651,6 +651,7 @@ name = "dlog_http4_client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "reqwest 0.12.24",
  "serde",
  "serde_json",
